@@ -164,6 +164,8 @@ A continuación se detallan los usuarios principales de la Plataforma de Predict
 
 En base a los requerimientos definidos consideramos apropiado implementar una arquitectura similar a la siguiente:
 
+![](../assets/prd-diagram-1.png)
+
 De manera simplificada:
 
-## Referencias
+![](../assets/prd-diagram-2.png)

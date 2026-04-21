@@ -141,6 +141,33 @@ usar verbos en el path: `/calculateForecast` → `POST /forecasts`.
 **Versionado:** las rutas se versionan con prefijo `/v1/`, `/v2/`.
 Ejemplo: `/v1/wells/:wellId/forecast`.
 
+#### Excepción: contratos de API impuestos externamente
+
+Cuando el contrato de una API está **dado por un cliente, especificación
+externa, o spec OpenAPI suministrada**, se respeta literalmente la
+convención del contrato aunque difiera de la regla general anterior.
+
+**Fundamento:** el contrato es fuente de verdad para validación
+automática, integración con consumidores externos y compatibilidad
+binaria. Cambiarlo por consistencia interna rompe la integración.
+
+**Caso actual:** la adenda técnica de Fase 1 define los endpoints
+`/api/v1/forecast` y `/api/v1/wells` con query params y campos JSON en
+`snake_case` (`id_well`, `date_start`, `date_end`, `date_query`, `prod`).
+La implementación respeta esta convención exactamente.
+
+**Aplicación práctica:**
+
+- El código interno (modelos, servicios, DTOs) sigue la regla general
+  del lenguaje (camelCase en TS, snake_case en Python).
+- En la capa de serialización / deserialización se mapea entre la
+  convención interna y la del contrato.
+- Si se agregan endpoints **propios** no incluidos en el contrato,
+  siguen la regla general.
+
+Esta excepción se formaliza en el ADR correspondiente al contrato
+específico (ver ADR-0007).
+
 ---
 
 ### 5. Base de datos
@@ -270,3 +297,5 @@ revisor de PRs.
 - ADR-0002 (Idioma del proyecto).
 - ADR-0004 (Estrategia de branching).
 - ADR-0005 (Convenciones de commits y PRs).
+- ADR-0007 (Alineación con contrato OpenAPI de Fase 1) — caso concreto
+  de aplicación de la excepción de la Sección 4.

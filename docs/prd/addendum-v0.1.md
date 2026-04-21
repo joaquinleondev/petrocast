@@ -1,6 +1,6 @@
 # Addendum v0.1 al PRD — Plataforma Predictiva
 
-- **Versión:** v0.1
+- **Versión:** v0.2
 - **Fecha:** 2026-04-20
 - **Autores:** Equipo Petrocast
 - **Estado:** Propuesto — pendiente de validación con cliente
@@ -292,6 +292,55 @@ Adoptamos un modelo de seguridad **por capas**, proporcional al riesgo:
 - Data masking por rol (ej: pozos en desarrollo visibles solo a ciertos
   roles).
 
+### Decisión del cliente para Fase 1
+
+La adenda técnica de Fase 1 emitida por la cátedra define una
+implementación **simplificada** de seguridad, válida exclusivamente
+para esta fase:
+
+- **Mecanismo:** API key estática preconfigurada.
+- **Valor:** `abcdef12345`.
+- **Transporte:** header HTTP `X-API-Key`.
+- **Validación:** se valida antes de responder cualquier request.
+- **Respuesta en caso de fallo:** HTTP 403 (Forbidden).
+- **Alcance:** aplica a todos los endpoints de la API
+  (`/api/v1/forecast`, `/api/v1/wells`).
+
+**Relación con la propuesta general:** esta decisión **no reemplaza**
+la propuesta de seguridad por capas descrita más arriba, que debería
+implementarse en fases posteriores o en un entorno productivo real.
+Para Fase 1, el cliente priorizó la simplicidad del mock sobre la
+robustez de seguridad, lo cual es razonable dado el propósito de esta
+fase (demo del servicio, no exposición a sistemas productivos).
+
+**Implicancias técnicas para el MVP:**
+
+- La API key se lee desde una variable de entorno (`API_KEY`), no
+  hardcodeada en el código, aunque su valor default coincida con el
+  especificado. Esto facilita rotación en fases posteriores sin cambios
+  de código.
+- El audit log propuesto en la sección general **se mantiene** para
+  Fase 1 aunque la autenticación sea trivial, porque es evidencia para
+  el KPI de gobernanza de datos del PRD.
+- El rate limiting propuesto se difiere a Fase 2+, salvo que durante
+  Fase 1 se detecte abuso.
+
+**Brecha respecto a la propuesta completa:**
+
+| Capa de seguridad                 | Propuesta general                     | Fase 1 (adenda)                   |
+| --------------------------------- | ------------------------------------- | --------------------------------- |
+| Autenticación servicio-a-servicio | API Keys rotables por cliente         | API Key estática única            |
+| Autenticación de usuarios         | OAuth 2.0 + JWT                       | No aplica (no hay UI autenticada) |
+| Autorización (RBAC)               | Por rol (Analista / Ingeniero / Data) | No aplica                         |
+| Rate limiting                     | 100 req/min por key                   | No requerido                      |
+| Audit log                         | Completo                              | Completo                          |
+| HTTPS obligatorio                 | Sí                                    | Recomendado                       |
+| Headers de seguridad              | Sí                                    | Recomendado                       |
+
+Las capas diferidas **se retomarán** en la planificación de Fase 2+
+según decisión del equipo, o permanecerán como recomendaciones para
+producción real.
+
 ### Asunciones
 
 - La API se expondrá dentro de una red corporativa o VPN del cliente,
@@ -461,6 +510,7 @@ delta explícito.
 
 ## Historial de versiones
 
-| Versión | Fecha      | Cambios                                                    |
-| ------- | ---------- | ---------------------------------------------------------- |
-| v0.1    | 2026-04-20 | Versión inicial con respuestas a las 4 preguntas abiertas. |
+| Versión | Fecha      | Cambios                                                                                             |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| v0.1    | 2026-04-20 | Versión inicial con respuestas a las 4 preguntas abiertas.                                          |
+| v0.2    | 2026-04-XX | Actualizada Pregunta 3 con decisión de cliente para Fase 1 (API key estática según adenda técnica). |
