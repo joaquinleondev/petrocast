@@ -20,11 +20,11 @@ Cada entrega estará compuesta por los siguientes ítems:
 
 - URL con el servicio a evaluar, accesible durante el periodo de corrección y/o a demanda del equipo docente.
 - Commit al repositorio de git que se tomará para la entrega. Este commit deberíamos encontrar:
-    - README actualizado con instrucciones para acceder a todos los componentes del desarrollo.
-    - Directorio con ADRs (Architecture Decision Record) para las decisiones de diseño tomadas en cada entrega (este tema será expandido en la materia).
-        - El objetivo de estos archivos es explicitar los análisis realizados durante el desarrollo, lo cual es un concepto de evaluación como se menciona luego en este documento.
-        - Sugerimos utilizar un formato simple como este.
-    - Video de 5 minutos a modo de demo del desarrollo realizado.
+  - README actualizado con instrucciones para acceder a todos los componentes del desarrollo.
+  - Directorio con ADRs (Architecture Decision Record) para las decisiones de diseño tomadas en cada entrega (este tema será expandido en la materia).
+    - El objetivo de estos archivos es explicitar los análisis realizados durante el desarrollo, lo cual es un concepto de evaluación como se menciona luego en este documento.
+    - Sugerimos utilizar un formato simple como este.
+  - Video de 5 minutos a modo de demo del desarrollo realizado.
 
 ## Evaluación
 
