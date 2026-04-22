@@ -1,7 +1,7 @@
-# Addendum v0.1 al PRD — Plataforma Predictiva
+# Addendum v0.2 al PRD — Plataforma Predictiva
 
 - **Versión:** v0.2
-- **Fecha:** 2026-04-20
+- **Fecha:** 2026-04-21
 - **Autores:** Equipo Petrocast
 - **Estado:** Propuesto — pendiente de validación con cliente
 - **Documento padre:** [PRD v0.1](./prd-v0.1.md)

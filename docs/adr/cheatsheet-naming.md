@@ -1,6 +1,6 @@
 # Naming Cheatsheet
 
-Consulta rápida. Detalles completos en [ADR-0006](./0006-naming-conventions.md).
+Consulta rápida. Detalles completos en [ADR-0006](./0006-convenciones-naming.md).
 
 ## Archivos & carpetas generales
 

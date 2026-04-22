@@ -1,7 +1,7 @@
 # ADR-0004: Estrategia de branching basada en trunk
 
 - **Estado:** Aceptado
-- **Fecha:** 2026-04-20
+- **Fecha:** 2026-04-21
 - **Autores:** Equipo Petrocast
 - **Decisores:** Equipo Petrocast
 
@@ -104,6 +104,19 @@ necesidad, se crea una **integration branch efímera**
 probar, y si todo funciona se mergean a `main`. La integration branch se
 borra. No existen branches de integración permanentes.
 
+### Relación con la topología de deployment
+
+La estrategia de branching definida en este ADR es **ortogonal** a la
+topología de deployment. Una sola branch (`main`) alimenta múltiples
+ambientes (dev, staging, producción) mediante distintos disparadores
+automatizados. La topología concreta se formaliza en el ADR-0007.
+
+El resumen:
+
+- Apertura de PR → preview environment efímero.
+- Merge a `main` → deploy automático a staging.
+- Tag `v*` en `main` → deploy a producción con approval.
+
 ## Consecuencias
 
 **Positivas:**
@@ -155,3 +168,4 @@ borra. No existen branches de integración permanentes.
 - [Vincent Driessen — "Note on Git Flow"](https://nvie.com/posts/a-successful-git-branching-model/)
   (el propio autor desaconseja Git Flow para SaaS/web moderno)
 - ADR-0005 (Convenciones de commits y estrategia de merge).
+- ADR-0008 (Topología de ambientes).
