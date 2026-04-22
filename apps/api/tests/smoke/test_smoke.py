@@ -6,9 +6,7 @@ import pytest
 BASE_URL = os.getenv("SMOKE_BASE_URL")
 API_KEY = os.getenv("SMOKE_API_KEY", "abcdef12345")
 
-pytestmark = pytest.mark.skipif(
-    BASE_URL is None, reason="SMOKE_BASE_URL not set (run post-deploy)"
-)
+pytestmark = pytest.mark.skipif(BASE_URL is None, reason="SMOKE_BASE_URL not set (run post-deploy)")
 
 
 def test_live():

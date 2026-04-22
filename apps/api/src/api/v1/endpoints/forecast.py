@@ -26,9 +26,7 @@ def get_forecast(
     date_end: date = Query(..., description="Fecha de fin (YYYY-MM-DD)"),
 ) -> ForecastResponse:
     if date_start > date_end:
-        raise HTTPException(
-            status_code=400, detail="date_start must be before date_end"
-        )
+        raise HTTPException(status_code=400, detail="date_start must be before date_end")
 
     result = forecast_service.get_forecast(id_well, date_start, date_end)
     if result is None:
