@@ -98,7 +98,10 @@ Implementamos **tres endpoints** con semántica diferenciada:
   falla, el container se marca como "not ready" y **no recibe tráfico**
   hasta que vuelva a estar OK. No se reinicia.
 
-**3. `GET /health` — Deep / informational**
+**3. `GET /health/deep` — Deep / informational**
+
+> Nota: ADR-0020 fija el path como `/health/deep` por simetría de prefijo.
+> Este ADR originalmente lo llamaba `/health`; la semántica no cambia.
 
 - Pregunta: ¿cuál es el estado detallado del sistema?
 - Implementación: devuelve un JSON rico con versión, uptime, estado de
@@ -126,7 +129,7 @@ Implementamos **tres endpoints** con semántica diferenciada:
 ```
 
 **Autenticación de health endpoints:** `/health/live` y `/health/ready`
-**no requieren API key** (monitoreo interno). `/health` **sí requiere
+**no requieren API key** (monitoreo interno). `/health/deep` **sí requiere
 API key** (puede exponer información de infraestructura).
 
 ### Verificación post-deploy
@@ -137,7 +140,7 @@ El pipeline de CI/CD, tras pushear nuevos containers:
    default 60s).
 2. Consulta `/health/ready` hasta obtener 200 OK, con timeout máximo de
    2 minutos.
-3. Consulta `/health` y verifica que `version` coincida con la versión
+3. Consulta `/health/deep` y verifica que `version` coincida con la versión
    esperada (evita servir containers cacheados o mal deployados).
 4. Si cualquier paso falla, se dispara rollback automático.
 
