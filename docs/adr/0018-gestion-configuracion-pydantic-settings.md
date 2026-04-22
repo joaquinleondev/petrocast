@@ -53,7 +53,7 @@ esquema consistente para:
 ## Decisión
 
 - **La app carga configuración con Pydantic Settings v2.** Una clase
-  `Settings` en `apps/api/src/config.py` hereda de `BaseSettings`, con
+  `Settings` en `apps/api/src/core/config.py` hereda de `BaseSettings`, con
   campos tipados, validators y `SettingsConfigDict(env_file=".env",
 env_file_encoding="utf-8", extra="forbid", case_sensitive=False)`.
 - **Origen de los secrets:** GitHub Secrets (a nivel de Environment para
