@@ -1,11 +1,5 @@
 from datetime import date, timedelta
 
-WELLS = [
-    {"id_well": "POZO-001"},
-    {"id_well": "POZO-002"},
-    {"id_well": "POZO-003"},
-]
-
 _BASE_PRODUCTION: dict[str, float] = {
     "POZO-001": 150.0,
     "POZO-002": 220.0,
@@ -16,12 +10,15 @@ _BASE_PRODUCTION: dict[str, float] = {
 _DAILY_DECLINE = 0.002
 
 
-def generate_forecast(id_well: str, date_start: date, date_end: date) -> list[dict]:
+ForecastRow = dict[str, str | float]
+
+
+def generate(id_well: str, date_start: date, date_end: date) -> list[ForecastRow]:
     base = _BASE_PRODUCTION.get(id_well)
     if base is None:
         return []
 
-    result = []
+    result: list[ForecastRow] = []
     current = date_start
     day = 0
 
