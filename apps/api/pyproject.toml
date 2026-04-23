@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.136.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
     "pydantic-settings>=2.0.0",
 ]
 
@@ -42,6 +43,10 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["prometheus_fastapi_instrumentator.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration", "tests/contract"]

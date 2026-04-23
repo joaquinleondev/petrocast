@@ -21,4 +21,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    networks:
+      - petrocast
     restart: unless-stopped
+
+networks:
+  petrocast:
+    external: true

@@ -53,3 +53,4 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0018](./0018-gestion-configuracion-pydantic-settings.md) | Gestión configuración Pydantic Settings  | Aceptado | 2026-04-21 |
 | [0019](./0019-infraestructura-terraform-aws.md)           | Infraestructura Terraform AWS            | Aceptado | 2026-04-21 |
 | [0020](./0020-estructura-directorios-backend.md)          | Estructura directorios backend           | Aceptado | 2026-04-22 |
+| [0021](./0021-observabilidad-local-fase1.md)              | Observabilidad local Fase 1              | Aceptado | 2026-04-23 |

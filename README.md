@@ -13,7 +13,7 @@
 ## Documentación
 
 - [PRD](docs/prd/prd-v0.1.md)
-- [Addendum del PRD (decisiones sobre preguntas abiertas)](docs/prd/addendum-v0.1.md)
+- [Addendum del PRD (decisiones sobre preguntas abiertas)](docs/prd/addendum-v0.2.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
 - [Backlog](docs/backlog/user-stories.md)
@@ -27,3 +27,26 @@
 | Fase 3 | 2026-06-30 | ⏳ Pendiente     | —    |
 
 ## Cómo ejecutar
+
+### Prerequisito
+
+```bash
+docker network create petrocast
+```
+
+### API
+
+```bash
+docker compose -f infra/compose.dev.yml up --build
+```
+
+Disponible en <http://localhost:8000>. Documentación OpenAPI en <http://localhost:8000/docs>.
+
+### Stack de observabilidad
+
+```bash
+docker compose -f infra/compose.observability.yml up
+```
+
+- Grafana: <http://localhost:3000> (sin login, dashboard cargado automáticamente)
+- Prometheus: <http://localhost:9090>
