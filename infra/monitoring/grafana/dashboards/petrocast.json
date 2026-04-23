@@ -70,7 +70,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_requests_total{status_code=~\"5..\"}[1m])) / sum(rate(http_requests_total[1m]))",
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5xx\"}[1m])) / sum(rate(http_requests_total[1m]))",
           "legendFormat": "Error rate %"
         }
       ],
@@ -99,7 +99,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "http_requests_in_progress",
+          "expr": "sum(http_requests_in_progress) or vector(0)",
           "legendFormat": "In-flight"
         }
       ],
@@ -119,8 +119,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (status_code) (increase(http_requests_total[30m]))",
-          "legendFormat": "HTTP {{status_code}}"
+          "expr": "sum by (status) (increase(http_requests_total[30m]))",
+          "legendFormat": "HTTP {{status}}"
         }
       ]
     },

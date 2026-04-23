@@ -11,6 +11,8 @@ services:
       - "--web.enable-lifecycle"
     ports:
       - "9090:9090"
+    networks:
+      - petrocast
     restart: unless-stopped
 
   grafana:
@@ -26,6 +28,8 @@ services:
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/petrocast.json
     ports:
       - "3000:3000"
+    networks:
+      - petrocast
     depends_on:
       - prometheus
     restart: unless-stopped
@@ -33,3 +37,7 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
+
+networks:
+  petrocast:
+    external: true
