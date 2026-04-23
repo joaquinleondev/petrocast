@@ -44,6 +44,10 @@ files = ["src"]
 module = ["tests.*"]
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = ["prometheus_fastapi_instrumentator.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration", "tests/contract"]
 addopts = "--cov=src --cov-report=term-missing --cov-fail-under=70"
