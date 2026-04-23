@@ -70,7 +70,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_requests_total{status=~\"5xx\"}[1m])) / sum(rate(http_requests_total[1m]))",
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5[xX][xX]\"}[1m])) / sum(rate(http_requests_total[1m]))",
           "legendFormat": "Error rate %"
         }
       ],

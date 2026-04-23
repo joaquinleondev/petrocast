@@ -53,13 +53,13 @@ reiniciar la app sin afectar el monitoreo.
 
 Los componentes diferidos y su justificación:
 
-| Componente | Motivo para diferir |
-|---|---|
+| Componente      | Motivo para diferir                                                   |
+| --------------- | --------------------------------------------------------------------- |
 | Loki + Promtail | Requiere configuración de filesystem del host; útil con servidor real |
-| Alertmanager | Requiere un Discord webhook activo para ser útil |
-| node_exporter | Métricas de CPU/RAM del host; relevante en EC2, no en laptop |
-| cadvisor | Métricas de containers del host; relevante en EC2 |
-| structlog | Mejora de logs del API; no bloquea el dashboard de métricas |
+| Alertmanager    | Requiere un Discord webhook activo para ser útil                      |
+| node_exporter   | Métricas de CPU/RAM del host; relevante en EC2, no en laptop          |
+| cadvisor        | Métricas de containers del host; relevante en EC2                     |
+| structlog       | Mejora de logs del API; no bloquea el dashboard de métricas           |
 
 Todos estos componentes están documentados en ADR-0017 y se incorporan
 al sprint de deployment cuando el servidor EC2 esté disponible.
