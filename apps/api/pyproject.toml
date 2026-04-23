@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.136.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
     "pydantic-settings>=2.0.0",
 ]
 
