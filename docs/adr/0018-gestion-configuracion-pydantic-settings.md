@@ -7,11 +7,11 @@
 
 ## Contexto y problema
 
-El sistema tiene tres ambientes (dev, staging, prod) sobre una misma EC2
-(ADR-0008, ADR-0010), cada uno con credenciales y parámetros distintos:
-cadena de conexión a Postgres, API key interna, claves de servicios
-externos en Fases 2/3, endpoints de observabilidad, etc. Necesitamos un
-esquema consistente para:
+El sistema tiene tres ambientes separados (preview/dev, staging, prod)
+sobre EC2 distintas con Docker Swarm (ADR-0008, ADR-0010), cada uno con
+credenciales y parámetros distintos: API key interna, futuras cadenas de
+conexión a Postgres, claves de servicios externos en Fases 2/3, endpoints
+de observabilidad, etc. Necesitamos un esquema consistente para:
 
 1. Cómo la aplicación **lee** su configuración en runtime.
 2. Dónde **viven los secrets** (fuente de verdad) y cómo llegan al
@@ -57,11 +57,10 @@ esquema consistente para:
   campos tipados, validators y `SettingsConfigDict(env_file=".env",
 env_file_encoding="utf-8", extra="forbid", case_sensitive=False)`.
 - **Origen de los secrets:** GitHub Secrets (a nivel de Environment para
-  staging y prod, a nivel de repo para el resto). El workflow de deploy
-  (ADR-0011) genera un `.env` en la EC2 con `envsubst` a partir de un
-  template, y lo monta como archivo (no como variable de entorno) en el
-  contenedor del backend, con permisos `600` y ownership `app:app`. Esto
-  evita que el `.env` aparezca en `docker inspect` como variable.
+  preview, staging y production). El workflow de deploy (ADR-0011) genera
+  o actualiza un `.env` en la EC2 destino con `envsubst` a partir de un
+  template, y lo inyecta en el servicio Swarm como archivo/configuración de
+  runtime. Esto evita que los secretos queden embebidos en la imagen Docker.
 - **`.env.example` versionado.** Contiene todas las variables esperadas, con
   valores de ejemplo (nunca reales) y un comentario por variable. Un test
   de CI verifica que todas las keys de `.env.example` existen en la clase
@@ -77,17 +76,17 @@ Jerarquía de resolución (primer origen que exista gana):
 Las claves por ambiente siguen el patrón:
 
 ```text
-# En GitHub Environments → staging
+# En GitHub Environments -> staging
 DATABASE_URL=postgresql+asyncpg://...
 API_KEY=...
-# En GitHub Environments → production
+# En GitHub Environments -> production
 DATABASE_URL=postgresql+asyncpg://...
 API_KEY=...
 ```
 
 El contrato de API de Fase 1 usa una API key estática (`abcdef12345`)
-documentada en el Addendum al PRD v0.2; en staging y prod esa key vive en
-GitHub Secrets y se lee como `API_KEY_INTERNAL` en `Settings`.
+documentada en la adenda de Fase 1; en preview, staging y producción esa key
+vive en GitHub Secrets y se lee como `API_KEY` en `Settings`.
 
 ## Consecuencias
 
@@ -179,8 +178,8 @@ log`.
 
 ## Referencias
 
-- ADR-0008 — Entornos dev/staging/prod.
-- ADR-0010 — EC2 + Docker Compose + Traefik.
+- ADR-0008 — Entornos preview/dev, staging y prod.
+- ADR-0010 — EC2 + Docker Swarm + Traefik.
 - ADR-0011 — Workflows de GitHub Actions.
 - ADR-0014 — Las imágenes no contienen secrets.
 - ADR-0019 — Infraestructura con Terraform (no reemplaza secrets de

@@ -7,10 +7,10 @@
 
 ## Contexto y problema
 
-ADR-0017 define el stack completo de observabilidad para producción:
-Prometheus + Grafana + Loki + Promtail + Alertmanager + node_exporter +
-cadvisor. Para la demo de Fase 1, el sistema corre localmente en Docker
-sin un servidor EC2 todavía disponible.
+ADR-0017 define una estrategia de observabilidad por capas: CloudWatch como
+capa operacional base para AWS y Prometheus + Grafana como dashboard local de
+Fase 1. Para la demo de Fase 1, el sistema corre localmente en Docker sin
+depender de servidores EC2 ni credenciales externas.
 
 Necesitamos decidir qué subconjunto del stack definido en ADR-0017
 implementar en Fase 1 de manera que:
@@ -25,14 +25,15 @@ implementar en Fase 1 de manera que:
   producción completo.
 - El servidor EC2 todavía no está provisionado (se aborda en sprint de
   deployment).
-- Loki, Promtail y Alertmanager tienen dependencias de configuración de
-  red y persistencia que los hacen no triviales de correr localmente.
+- Loki, Promtail y Alertmanager se consideran mejoras futuras si la
+  observabilidad de aplicación crece; no son necesarios para demostrar el
+  dashboard requerido en Fase 1.
 - El equipo dispone de Docker en sus máquinas.
 
 ## Opciones consideradas
 
-1. **Implementar el stack completo de ADR-0017** (Prometheus + Grafana +
-   Loki + Promtail + Alertmanager + node_exporter + cadvisor).
+1. **Implementar un stack completo de observabilidad local** (Prometheus +
+   Grafana + Loki + Promtail + Alertmanager + node_exporter + cadvisor).
 2. **Implementar solo Prometheus + Grafana** con métricas de la API.
 3. **Usar Grafana Cloud free tier** para no correr nada localmente.
 
@@ -51,18 +52,18 @@ El stack de observabilidad corre en `infra/compose.observability.yml`
 **separado** del `infra/compose.dev.yml` (per ADR-0017), permitiendo
 reiniciar la app sin afectar el monitoreo.
 
-Los componentes diferidos y su justificación:
+Los componentes no incluidos en el stack local y su justificación:
 
 | Componente      | Motivo para diferir                                                   |
 | --------------- | --------------------------------------------------------------------- |
-| Loki + Promtail | Requiere configuración de filesystem del host; útil con servidor real |
-| Alertmanager    | Requiere un Discord webhook activo para ser útil                      |
-| node_exporter   | Métricas de CPU/RAM del host; relevante en EC2, no en laptop          |
-| cadvisor        | Métricas de containers del host; relevante en EC2                     |
+| Loki + Promtail | Aporta búsqueda avanzada de logs, no requerida para Fase 1            |
+| Alertmanager    | Requiere canales de alerta activos y reglas maduras                   |
+| node_exporter   | Métricas de CPU/RAM del host; en AWS se cubren con CloudWatch         |
+| cadvisor        | Métricas de containers del host; no bloquea la demo local             |
 | structlog       | Mejora de logs del API; no bloquea el dashboard de métricas           |
 
-Todos estos componentes están documentados en ADR-0017 y se incorporan
-al sprint de deployment cuando el servidor EC2 esté disponible.
+Estos componentes podrán incorporarse en Fase 2/3 si el equipo necesita
+observabilidad más profunda que CloudWatch + `/metrics`.
 
 ## Consecuencias
 
@@ -77,21 +78,21 @@ al sprint de deployment cuando el servidor EC2 esté disponible.
 
 **Negativas / trade-offs asumidos:**
 
-- Sin métricas de CPU/RAM del host (node_exporter). La adenda pide "uso
-  de recursos"; in-flight requests cubre parcialmente este requisito.
-  Se completa cuando haya servidor.
+- Sin métricas de CPU/RAM del host en el compose local (node_exporter). En
+  AWS, ese punto se cubre con CloudWatch/CloudWatch Agent según ADR-0017.
 - Sin centralización de logs. Los logs del API son accesibles vía
   `docker logs` mientras tanto.
-- Sin alertas. Se agrega Alertmanager en el sprint de deployment.
+- Sin alertas locales. En AWS, las alertas básicas pueden resolverse con
+  CloudWatch Alarms.
 
 **Neutras:**
 
-- La arquitectura del compose sigue el patrón de ADR-0017; agregar los
-  componentes faltantes es extender `compose.observability.yml` sin
-  refactorizar lo existente.
+- La arquitectura local conserva `/metrics`, por lo que agregar Prometheus
+  centralizado o Grafana con CloudWatch como data source no requiere
+  refactorizar la API.
 
 ## Referencias
 
-- ADR-0017 — Stack completo de observabilidad (Prometheus/Grafana/Loki).
-- ADR-0010 — Plataforma de hosting EC2 (donde el stack completo se deploya).
+- ADR-0017 — Observabilidad con CloudWatch en AWS y dashboard local.
+- ADR-0010 — Plataforma de hosting EC2 con Docker Swarm.
 - Adenda técnica Fase 1 — requisitos del dashboard de monitoreo.

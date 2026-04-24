@@ -1,4 +1,4 @@
-# ADR-0009: Estrategia de deployment, health checks y rollback
+# ADR-0009: Estrategia de deployment, rolling updates y rollback con Docker Swarm
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-04-21
@@ -9,235 +9,265 @@
 
 La adenda técnica de Fase 1 exige:
 
-1. "Estrategias de despliegue de bajo riesgo (p. ej., **rolling updates o
-   canary deployments**)".
-2. "**Recuperación automática** en caso que el [despliegue] falle".
-3. "**Verificación automática de la salud** tras el despliegue".
+1. Estrategias de despliegue de bajo riesgo, como rolling updates o canary
+   deployments.
+2. Recuperación automática si el despliegue falla.
+3. Verificación automática de salud tras el despliegue.
 
-Definida ya la topología de ambientes (ADR-0007), resta decidir:
+ADR-0008 define tres ambientes separados:
 
-- Cómo se actualizan los containers al recibir una nueva versión.
-- Cómo se verifica que un deployment fue exitoso.
-- Qué ocurre si el deployment falla.
+```text
+PR abierta   -> preview/dev efimero
+merge main   -> staging persistente
+tag v*       -> produccion persistente
+```
+
+Cada ambiente corre sobre una EC2 con Docker Swarm single-node. Debemos
+definir cómo se actualizan los servicios, cómo se verifica que el deploy
+funcionó y cómo se vuelve a la versión anterior si algo falla.
 
 ## Drivers de la decisión
 
-- Requisito explícito de la adenda de deploy "de bajo riesgo".
+- Requisito explícito de rolling updates o estrategia equivalente.
+- Requisito explícito de rollback automático.
 - Requisito explícito de health checks post-deploy.
-- Requisito explícito de recuperación automática.
-- El PRD exige disponibilidad del 99.5% de la API.
-- Equipo pequeño: la solución debe ser operable sin conocimiento
-  profundo de orquestadores complejos.
+- El PRD exige disponibilidad de la API.
+- El equipo necesita una solución operable sin Kubernetes.
+- La estrategia debe funcionar igual en staging y producción.
+- Los previews por PR deben ser baratos y simples de crear/destruir.
 
 ## Opciones consideradas
 
 ### Estrategia de rollout
 
-1. **Recreate** (apagar viejo → prender nuevo): causa downtime.
-2. **Rolling update** (reemplazo gradual manteniendo réplicas activas).
-3. **Blue-green** (dos ambientes idénticos, switch de tráfico).
-4. **Canary** (subset de tráfico a la nueva versión).
+1. **Recreate**: apagar servicio viejo y prender servicio nuevo.
+2. **Rolling update con Docker Swarm**.
+3. **Blue-green**: dos stacks completos y switch de tráfico.
+4. **Canary**: enviar una porción del tráfico a la versión nueva.
 
 ### Health checks
 
-1. **Single endpoint** (`/health` genérico).
-2. **Kubernetes-style** (liveness + readiness + startup).
-3. **Deep checks** (verificación de dependencias: DB, cache, etc.).
+1. **Single endpoint** (`/health`) para todo.
+2. **Tres niveles** (`/health/live`, `/health/ready`, `/health/deep`).
+3. **Deep checks solamente**.
 
 ### Rollback
 
-1. **Manual** tras detectar problema.
-2. **Automático** por health check fallido.
-3. **Automático** por métricas degradadas (error rate, latency).
+1. **Manual** tras detectar un problema.
+2. **Automático por Swarm** si el servicio falla durante el update.
+3. **Automático por pipeline** si los smoke tests fallan.
+4. **Automático por métricas degradadas** (latencia/error rate).
 
 ## Decisión
 
-### Rollout: Rolling update con dos réplicas
+Adoptamos **Docker Swarm rolling updates + rollback automático**, reforzado
+con smoke tests desde GitHub Actions.
 
-**Para staging y producción:**
+### Rollout por ambiente
 
-- Cada servicio corre con **2 réplicas mínimo** en Docker Compose
-  (`deploy.replicas: 2`).
-- Al deployar una nueva versión, se actualizan las réplicas **de a una**,
-  esperando a que la nueva pase health check antes de actualizar la
-  siguiente.
-- Traefik enruta tráfico solo a réplicas healthy, por lo que los usuarios
-  nunca reciben respuestas de una réplica en actualización.
-- Downtime teórico: **cero**.
+**Preview/dev:**
 
-**Para preview environments (dev):**
+- Cada PR crea un stack Swarm propio (`pr-<N>`).
+- El servicio corre con 1 réplica.
+- El update puede usar recreate o rolling simplificado porque el tráfico es
+  solo del equipo.
+- Al cerrar o mergear el PR, el pipeline ejecuta `docker stack rm pr-<N>`.
 
-- Una sola réplica por PR es suficiente (tráfico solo del equipo).
-- Estrategia simplificada: _recreate_ aceptable.
+**Staging y producción:**
 
-Canary y blue-green se **descartan para Fase 1** por complejidad
-desproporcionada. Se mencionan como futuras mejoras si se justifica
-más adelante.
+- Cada ambiente corre como stack Swarm persistente (`staging`, `prod`).
+- El servicio `mock-api` corre con 2 réplicas.
+- El update se realiza con `update_config`:
+  - `parallelism: 1`
+  - `order: start-first`
+  - `failure_action: rollback`
+  - `monitor: 30s`
+  - `max_failure_ratio: 0`
+- El stack declara un `healthcheck` a nivel de servicio contra
+  `/health/ready`. No se define en el Dockerfile para poder variar la
+  política por ambiente sin reconstruir la imagen.
+- Si una réplica nueva no arranca, se cae o no supera el período de
+  monitoreo, Swarm revierte automáticamente.
 
-### Health checks: tres niveles estilo Kubernetes
+Configuración base:
 
-Implementamos **tres endpoints** con semántica diferenciada:
+```yaml
+services:
+  mock-api:
+    image: ${IMAGE_URI}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        monitor: 30s
+        max_failure_ratio: 0
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+```
+
+Canary y blue-green quedan fuera de Fase 1 por complejidad operativa. Swarm
+rolling update cubre el requisito con menor overhead.
+
+### Health checks
+
+Implementamos tres endpoints:
 
 **1. `GET /health/live` — Liveness**
 
-- Pregunta: ¿el proceso está corriendo?
-- Implementación: responde 200 con `{ "status": "alive" }` siempre que
-  el servidor pueda responder HTTP.
-- No verifica dependencias.
-- Uso: Traefik / Docker lo consulta cada pocos segundos. Si falla
-  repetidamente, el container se reinicia automáticamente.
+- Pregunta: ¿el proceso HTTP está vivo?
+- Responde 200 con `{ "status": "alive" }`.
+- No valida dependencias.
+- No requiere API key.
 
 **2. `GET /health/ready` — Readiness**
 
-- Pregunta: ¿el proceso puede atender tráfico?
-- Implementación: verifica que dependencias críticas respondan
-  (conexión a BD activa, caché accesible, etc.). Responde 200 con
-  `{ "status": "ready", "checks": { "database": "ok", ... } }` si
-  todo OK, o 503 con el detalle de qué falló.
-- Uso: Traefik consulta al iniciar un container y durante su vida. Si
-  falla, el container se marca como "not ready" y **no recibe tráfico**
-  hasta que vuelva a estar OK. No se reinicia.
+- Pregunta: ¿el servicio puede atender tráfico?
+- Responde 200 con `{ "status": "ready", "checks": { ... } }` si está listo.
+- En Fase 1 no hay base de datos real; en Fase 2 debe validar dependencias
+  críticas.
+- No requiere API key para permitir health checks de infraestructura.
 
-**3. `GET /health/deep` — Deep / informational**
+**3. `GET /health/deep` — Deep / diagnóstico**
 
-> Nota: ADR-0020 fija el path como `/health/deep` por simetría de prefijo.
-> Este ADR originalmente lo llamaba `/health`; la semántica no cambia.
-
-- Pregunta: ¿cuál es el estado detallado del sistema?
-- Implementación: devuelve un JSON rico con versión, uptime, estado de
-  dependencias, latencia a cada una, timestamp del último deploy.
-- Uso: monitoreo humano, dashboards, debugging. No usado por
-  orquestadores.
-- **Este endpoint se reporta como el "health check" genérico hacia
-  afuera** (ej: para uptime monitors).
-
-**Ejemplo de response de `/health`:**
-
-```json
-{
-  "status": "ok",
-  "service": "predictiva-api",
-  "version": "1.2.3",
-  "commit": "a3f9b1c",
-  "deployed_at": "2026-04-28T14:32:10Z",
-  "uptime_seconds": 3600,
-  "checks": {
-    "database": { "status": "ok", "latency_ms": 4 },
-    "forecast_engine": { "status": "ok", "version": "0.1.0-mock" }
-  }
-}
-```
-
-**Autenticación de health endpoints:** `/health/live` y `/health/ready`
-**no requieren API key** (monitoreo interno). `/health/deep` **sí requiere
-API key** (puede exponer información de infraestructura).
+- Pregunta: ¿qué versión está corriendo y con qué estado interno?
+- Devuelve versión, commit, uptime y checks informativos.
+- Requiere API key porque puede exponer detalles operativos.
 
 ### Verificación post-deploy
 
-El pipeline de CI/CD, tras pushear nuevos containers:
+Después de `docker stack deploy`, GitHub Actions ejecuta:
 
-1. Espera a que los nuevos containers inicien (timeout configurable,
-   default 60s).
-2. Consulta `/health/ready` hasta obtener 200 OK, con timeout máximo de
-   2 minutos.
-3. Consulta `/health/deep` y verifica que `version` coincida con la versión
-   esperada (evita servir containers cacheados o mal deployados).
-4. Si cualquier paso falla, se dispara rollback automático.
+1. Esperar a que Swarm reporte el servicio actualizado.
+2. Consultar `/health/ready` hasta obtener 200 OK.
+3. Ejecutar smoke tests contra la URL pública del ambiente.
+4. Verificar que la respuesta de `/health/deep` corresponda al commit o tag
+   esperado.
 
-### Rollback automático
+Ejemplo conceptual:
 
-**Para staging y producción:**
+```bash
+curl -f https://staging.<dominio>/health/ready
+curl -f -H "X-API-Key: $API_KEY" https://staging.<dominio>/health/deep
+pytest tests/smoke
+```
 
-- El pipeline conserva la imagen Docker de la versión anterior hasta
-  que la nueva pase todos los health checks.
-- Si los health checks fallan, el pipeline:
-  1. Restaura la imagen anterior en los containers.
-  2. Verifica que la versión vieja vuelva a estar healthy.
-  3. Falla el job con un mensaje explícito.
-  4. Notifica al equipo (comentario en el PR, o Slack/Discord si se
-     configura).
+### Rollback automático en dos capas
 
-**El rollback automático se dispara por:**
+**Capa 1 — Docker Swarm**
 
-- Health check fallido post-deploy.
-- Containers que no logran arrancar (exit code != 0).
+Swarm revierte automáticamente si el contenedor falla durante el rolling
+update, no arranca o incumple la política de update.
 
-**No se dispara automáticamente por:**
+**Capa 2 — Pipeline**
 
-- Métricas de producción degradadas post-deploy (error rate, latency).
-  Esto requiere observabilidad integrada con el pipeline, fuera de
-  alcance de Fase 1. Queda como rollback manual.
+Si el servicio arranca pero falla un endpoint crítico, el workflow ejecuta:
+
+```bash
+docker service rollback <stack>_mock-api
+```
+
+Luego vuelve a consultar `/health/ready`. Si la versión anterior tampoco
+queda healthy, el job falla y deja evidencia en GitHub Actions.
+
+### Qué no cubre Fase 1
+
+No hacemos rollback automático por métricas degradadas de producción (por
+ejemplo, latencia p95 alta durante varios minutos). Eso requiere integrar
+alertas y métricas con decisiones automáticas del pipeline, lo cual excede
+Fase 1. Queda como mejora futura.
 
 ## Consecuencias
 
 **Positivas:**
 
-- Cumple los tres requisitos de la adenda (rolling, health, recuperación).
-- Downtime efectivo cero en updates normales.
-- Detección temprana de deploys rotos sin intervención humana.
-- Patrón de health checks estándar de industria (Kubernetes-style),
-  reutilizable en fases futuras si se migra a K8s.
-- Trazabilidad: `/health` expone versión y commit exacto corriendo.
+- Cumple rolling updates, health checks y rollback automático sin Kubernetes.
+- Staging y producción tienen updates de bajo riesgo con dos réplicas.
+- Los smoke tests cubren casos donde el proceso arranca pero la API no
+  responde correctamente.
+- El mismo patrón sirve para staging y producción.
+- La estrategia es demostrable con comandos y configuración versionada.
 
 **Negativas / trade-offs asumidos:**
 
-- Dos réplicas por servicio duplican consumo de recursos. En EC2
-  pequeña, puede requerir upgrade de tipo de instancia.
-- Implementar bien readiness (con dependencias reales) requiere
-  disciplina de código: cada servicio debe saber verificar sus
-  dependencias sin falsos positivos.
-- Rollback por métricas queda fuera de alcance; un deploy que "parece
-  healthy" pero degrada la experiencia no rollbackea solo.
+- Dos réplicas duplican el consumo de recursos en staging y producción.
+- Swarm single-node no protege contra caída física de la EC2.
+- El rollback de pipeline requiere que GitHub Actions tenga permisos para
+  ejecutar comandos remotos en la instancia.
+- Los previews tienen menor robustez que staging/prod, pero es intencional:
+  son efímeros y de bajo tráfico.
 
 **Neutras:**
 
-- Los tres niveles de health pueden parecer overkill para una API
-  simple. Son el estándar moderno y su implementación es trivial
-  (~50 líneas de código). Vale la pena adoptarlos desde el día 1.
+- El diseño puede evolucionar a Swarm multi-node, ECS o Kubernetes si el
+  proyecto crece. Los conceptos de health, rolling update y smoke tests se
+  mantienen.
 
 ## Pros y contras de cada opción
 
-### Rollout: Rolling update (elegida)
-
-- ✅ Cero downtime con 2+ réplicas.
-- ✅ Soportado nativo en Docker Swarm, Kubernetes, Traefik.
-- ✅ Simple de razonar.
-- ❌ Duplica recursos durante la transición.
-
-### Rollout: Recreate
+### Recreate
 
 - ✅ Simple.
-- ❌ Causa downtime. Incompatible con SLA de 99.5%.
+- ❌ Causa downtime.
+- ❌ No cumple bien el requisito de bajo riesgo.
 
-### Rollout: Blue-green
+### Rolling update con Docker Swarm (elegida)
 
-- ✅ Rollback instantáneo (switch de vuelta).
-- ❌ Duplica recursos permanentemente.
-- ❌ Complejidad de routing.
+- ✅ Soporta rolling update y rollback nativos.
+- ✅ Menor complejidad que Kubernetes.
+- ✅ Compatible con Traefik y ECR.
+- ✅ Configurable declarativamente en el stack.
+- ❌ Menos popular que Kubernetes en producción moderna.
 
-### Rollout: Canary
+### Blue-green
 
-- ✅ Mínimo blast radius ante un bug.
-- ❌ Requiere observabilidad para decidir "¿la canary va bien?".
-- ❌ Overkill para el volumen del TP.
+- ✅ Rollback rápido por switch de tráfico.
+- ❌ Duplica recursos por ambiente.
+- ❌ Agrega complejidad de routing y naming.
 
-### Health: Kubernetes-style (elegida)
+### Canary
 
-- ✅ Semántica clara (liveness vs readiness vs deep).
-- ✅ Permite a Traefik actuar correctamente (reiniciar vs no rutear).
-- ✅ Portable a K8s sin cambios.
+- ✅ Reduce blast radius ante bugs.
+- ❌ Requiere métricas y decisión automatizada para saber si la canary va
+  bien.
+- ❌ Overkill para una mock API académica.
 
-### Health: Single endpoint
+### Health checks de tres niveles (elegida)
 
-- ✅ Más simple de implementar.
-- ❌ Mezcla "¿estoy vivo?" con "¿puedo atender tráfico?". Lleva a
-  loops de reinicio cuando la BD está lenta.
+- ✅ Semántica clara: vivo, listo, diagnóstico.
+- ✅ Portable a Kubernetes si se migra.
+- ✅ Evita reiniciar procesos por fallas transitorias de dependencias.
+- ❌ Más endpoints que un mock mínimo.
 
 ## Referencias
 
 - ADR-0008 (Topología de ambientes).
-- ADR-0010 (Plataforma de hosting — justifica Docker Compose).
-- ADR-0011 (Plataforma de CI/CD — implementa las verificaciones).
-- [Kubernetes — Configure Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
-- [Traefik — Health Checks](https://doc.traefik.io/traefik/routing/services/#health-check)
-- Adenda técnica de Fase 1 (requisitos citados).
+- ADR-0010 (Hosting en EC2 con Docker Swarm).
+- ADR-0011 (GitHub Actions y despliegue remoto).
+- ADR-0016 (Smoke tests).
+- Docker Compose Deploy Specification — `update_config` y `rollback_config`.
+- Docker Swarm — rolling updates.
+- Adenda técnica de Fase 1.

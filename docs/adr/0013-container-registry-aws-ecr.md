@@ -1,4 +1,4 @@
-# ADR-0013: Container registry privado en AWS ECR
+# ADR-0013: Container registry privado en AWS ECR y promoción del mismo artefacto
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-04-21
@@ -7,136 +7,168 @@
 
 ## Contexto y problema
 
-La adenda técnica exige publicar las imágenes Docker en un **registry privado**
-como parte del pipeline de CI/CD, y que el despliegue a dev/staging/prod
-(ADR-0008, ADR-0010) arranque containers a partir de esas imágenes. Hay que
-decidir dónde vivirán esas imágenes, qué visibilidad tendrán y cómo autentica
-el pipeline contra el registry.
+La adenda técnica exige generar artefactos inmutables (imágenes Docker) como
+parte del pipeline de CI/CD y publicarlos en un registry privado. ADR-0008 y
+ADR-0010 definen que previews, staging y producción corren en EC2 con Docker
+Swarm, por lo que los nodos necesitan descargar imágenes desde un registry.
 
-Esta decisión interactúa con:
-
-- **ADR-0010**, que fija AWS EC2 como infraestructura.
-- **ADR-0011**, que define los workflows de GitHub Actions.
-- **ADR-0019**, que pone todo bajo Terraform incluyendo IAM.
+También debemos decidir cómo versionar esas imágenes para evitar un problema
+común: reconstruir una imagen distinta por ambiente y perder la garantía de
+que producción ejecuta exactamente lo validado en staging.
 
 ## Drivers de la decisión
 
-- **Alineación con AWS.** Dado que EC2 está en AWS (ADR-0010) y que vamos a
-  usar IAM para el rol de la instancia y S3 para el state de Terraform
-  (ADR-0019), centralizar el registry en AWS reduce superficie y permisos.
-- **Costo.** El TP cuenta con créditos educativos AWS. ECR cobra
-  almacenamiento + egress, cubierto por los créditos durante el TP.
-- **Privacidad del código.** El contenido de las imágenes incluye lógica
-  propietaria del cliente (aunque simulado en el TP) y no debe ser público.
-- **Autenticación del pipeline.** Preferimos autenticación federada (OIDC)
-  desde GitHub Actions hacia AWS, para no pegar credenciales de larga vida en
-  secrets. ECR integra directamente con IAM.
-- **Consistencia de herramientas.** Usar un solo plano de control
-  (Terraform + AWS) facilita la adopción y el debugging.
+- Alineación con AWS: usamos EC2, Route 53, IAM/OIDC, S3 y CloudWatch.
+- Privacidad: las imágenes no deben ser públicas.
+- Autenticación moderna: GitHub Actions debe publicar en el registry sin
+  access keys permanentes.
+- Trazabilidad: cada deploy debe apuntar a un commit, digest y tag claros.
+- Bajo costo: los créditos AWS cubren ECR durante el TP.
+- Limpieza automática: los tags efímeros de PR no deben acumularse
+  indefinidamente.
 
 ## Opciones consideradas
 
 1. **AWS ECR privado.**
 2. **GitHub Container Registry (`ghcr.io`) privado.**
-3. **Docker Hub privado (plan Pro).**
+3. **Docker Hub privado.**
 
 ## Decisión
 
-Usamos **AWS ECR privado** como único registry de Predictiva. Todas las
-imágenes (backend, mock API, workers cuando existan) se publican allí con el
-formato:
+Usamos **AWS ECR privado** como registry único para Petrocast.
+
+Formato de repositorio:
 
 ```text
-<acct>.dkr.ecr.us-east-1.amazonaws.com/predictiva/<componente>:<tag>
+<account>.dkr.ecr.<region>.amazonaws.com/petrocast/mock-api:<tag>
 ```
 
-Los `tag` siguen el esquema:
+### Estrategia de tags
 
-- `dev-pr-<número>` → entornos efímeros por PR.
-- `staging-<sha_corto>` → cada merge a `main`.
-- `v<semver>` → cada tag anotado en `main` (disparo de producción).
-- `latest` → **no se usa** (prohibido en Terraform del entorno prod).
+La imagen canónica de un commit es:
 
-La autenticación desde GitHub Actions usa **OIDC**, asumiendo un rol IAM con
-permisos acotados a `ecr:GetAuthorizationToken`, `ecr:BatchCheckLayerAvailability`,
-`ecr:PutImage`, `ecr:InitiateLayerUpload` y `ecr:UploadLayerPart`. La EC2
-tiene un rol IAM distinto con permisos de solo lectura (`ecr:BatchGetImage`,
-`ecr:GetDownloadUrlForLayer`).
+```text
+mock-api:sha-<sha_corto>
+```
 
-Habilitamos **image scanning "scan on push"** en modo básico (gratuito) para
-alertar sobre CVEs conocidas.
+Los tags por flujo apuntan al mismo digest:
 
-Las imágenes son **privadas**.
+```text
+Preview PR:
+  mock-api:pr-123-<sha_corto>
+
+Main / staging:
+  mock-api:sha-<sha_corto>
+  mock-api:staging-latest
+
+Release / producción:
+  mock-api:v1.0.0
+```
+
+Regla central:
+
+```text
+build once -> promote same artifact
+```
+
+Producción no reconstruye la imagen. El workflow resuelve el digest de
+`sha-<sha_corto>` ya validado y lo etiqueta como `v*`. De esta forma, si
+staging pasó smoke tests con un digest, producción usa ese mismo digest.
+
+### Tags prohibidos o restringidos
+
+- `latest` queda prohibido para despliegues.
+- `staging-latest` se permite solo como alias operativo de staging, nunca
+  como referencia para producción.
+- Producción solo puede usar tags `v*` o digests explícitos.
+
+### Autenticación
+
+GitHub Actions autentica contra AWS usando OIDC y asume un rol IAM con
+permisos mínimos para publicar imágenes:
+
+- `ecr:GetAuthorizationToken`
+- `ecr:BatchCheckLayerAvailability`
+- `ecr:InitiateLayerUpload`
+- `ecr:UploadLayerPart`
+- `ecr:CompleteLayerUpload`
+- `ecr:PutImage`
+
+Las EC2 tienen un rol IAM de solo lectura para descargar imágenes:
+
+- `ecr:BatchGetImage`
+- `ecr:GetDownloadUrlForLayer`
+- `ecr:GetAuthorizationToken`
+
+### Scanning y lifecycle
+
+Habilitamos scan on push en ECR para detectar CVEs conocidas.
+
+Lifecycle policies:
+
+- Expirar tags `pr-*` después de 7 días o mantener solo los últimos N por
+  repositorio.
+- Mantener los últimos 20 tags `sha-*`.
+- Mantener tags `v*` indefinidamente hasta que el equipo decida una política
+  de retención de releases.
+- Mantener `staging-latest` como alias mutable.
 
 ## Consecuencias
 
-### Positivas
+**Positivas:**
 
-- Integración nativa con IAM: no hay que gestionar usuarios y passwords de
-  registry; OIDC + roles cumplen con buenas prácticas modernas.
-- `scan on push` da una primera línea de defensa contra CVEs sin costo extra.
-- Terraform (ADR-0019) puede crear y versionar los repos de ECR, lifecycle
-  policies y permisos en un solo lugar.
-- El egress entre ECR y la EC2 dentro de la misma región es gratuito.
+- ECR se integra naturalmente con IAM, OIDC y EC2.
+- No hay credenciales long-lived para publicar imágenes.
+- La trazabilidad por digest evita dudas sobre qué corrió en cada ambiente.
+- `build once -> promote same artifact` reduce riesgo de diferencias entre
+  staging y producción.
+- Lifecycle policies controlan el crecimiento de imágenes de PR.
 
-### Negativas
+**Negativas / trade-offs asumidos:**
 
-- Dependencia dura de AWS: si quisiéramos migrar el cómputo a otra nube en
-  Fase 3, el registry viene con nosotros o lo reemplazamos.
-- El `docker pull` desde máquinas locales de desarrolladores exige `aws
-ecr get-login-password`, que no es complicado pero sí un paso más que
-  `docker pull` anónimo.
-- La autenticación OIDC requiere configurar un proveedor OIDC en IAM (costo
-  único, gestionado por Terraform).
+- Acoplamiento a AWS.
+- Los developers necesitan `aws ecr get-login-password` para hacer pulls
+  locales.
+- OIDC e IAM requieren configuración inicial vía Terraform.
+- ECR tiene URLs más largas que GHCR.
 
-### Neutras
+**Neutras:**
 
-- Lifecycle policies: mantenemos las últimas 10 imágenes de `dev-pr-*` y las
-  últimas 20 de `staging-*`; las `v*` (producción) se conservan
-  indefinidamente hasta que se decida lo contrario.
+- Si en el futuro se migra el runtime a otra nube, las imágenes pueden
+  republicarse en otro registry sin cambiar el Dockerfile.
 
 ## Pros y contras de las opciones
 
-### Opción 1 — AWS ECR privado
+### AWS ECR privado (elegida)
 
-- **Pros:**
-  - Integración IAM/OIDC nativa.
-  - Alineado con el resto del stack en AWS.
-  - Gestionable vía Terraform.
-  - Scan on push gratuito.
-  - Egress gratis intra-región.
-- **Contras:**
-  - Acoplamiento a AWS.
-  - URLs largas; requiere `aws ecr` CLI para login local.
+- ✅ Integración con IAM/OIDC.
+- ✅ Alineado con EC2, Terraform y AWS.
+- ✅ Lifecycle policies y scan on push.
+- ✅ Egress dentro de AWS simple de operar.
+- ❌ Acoplamiento a AWS.
 
-### Opción 2 — `ghcr.io` privado
+### GHCR privado
 
-- **Pros:**
-  - Gratuito para repositorios privados (sujeto a cuotas del plan GitHub).
-  - Autenticación trivial desde GitHub Actions con `GITHUB_TOKEN`.
-  - URLs más amigables.
-- **Contras:**
-  - Requiere sincronizar permisos entre GitHub y AWS (dos planos de control).
-  - Egress hacia EC2 pasa por Internet público; añade latencia y consumo de
-    créditos AWS en tráfico de entrada (entrante a EC2 sí es gratis, pero la
-    velocidad depende del ancho de banda de GitHub).
-  - Menos integrado con herramientas AWS como `Inspector`.
+- ✅ Integración trivial con GitHub Actions.
+- ✅ URLs más amigables.
+- ❌ Segundo plano de permisos separado de AWS.
+- ❌ EC2 debe autenticar contra GitHub en runtime.
 
-### Opción 3 — Docker Hub privado
+### Docker Hub privado
 
-- **Pros:**
-  - Marca conocida.
-- **Contras:**
-  - Plan privado es pago; los rate limits del free tier son un riesgo
-    operacional concreto (pulls anónimos limitados por IP).
-  - Sin ventaja frente a ECR o ghcr.io.
+- ✅ Muy conocido.
+- ❌ Plan privado pago.
+- ❌ Rate limits y menor integración con AWS.
+- ❌ Sin ventaja concreta sobre ECR en este proyecto.
 
 ## Referencias
 
-- ADR-0008 — Modelo de entornos dev/staging/prod.
-- ADR-0010 — AWS EC2 + Docker Compose + Traefik.
-- ADR-0011 — GitHub Actions workflows.
-- ADR-0014 — Estructura de imágenes Docker.
-- ADR-0019 — Terraform gestiona ECR, IAM y OIDC.
-- AWS ECR docs — private repositories, lifecycle policies, image scanning.
+- ADR-0008 (Topología de ambientes).
+- ADR-0009 (Deployments y rollback).
+- ADR-0010 (EC2 + Docker Swarm).
+- ADR-0011 (GitHub Actions + OIDC).
+- ADR-0014 (Imágenes Docker).
+- ADR-0019 (Terraform gestiona ECR e IAM).
+- AWS ECR — private repositories.
+- AWS ECR — lifecycle policies.
 - GitHub Actions — OIDC with AWS.
