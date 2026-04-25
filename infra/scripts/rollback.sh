@@ -6,6 +6,7 @@
 #   STACK_NAME  — stack to rollback (pr-NNN, staging, prod)
 #   AWS_REGION  — AWS region (used for logging)
 set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 exec > >(tee -a /var/log/deploy.log) 2>&1
 
 SERVICE="${STACK_NAME}_mock-api"

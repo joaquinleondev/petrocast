@@ -12,6 +12,7 @@
 #   AWS_REGION   — AWS region
 #   ECR_REGISTRY — ECR registry host (account.dkr.ecr.region.amazonaws.com)
 set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 exec > >(tee -a /var/log/deploy.log) 2>&1
 
 echo "[$(date -u)] Deploy start — stack=$STACK_NAME image=$IMAGE_URI"
