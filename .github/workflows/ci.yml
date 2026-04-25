@@ -34,4 +34,124 @@ jobs:
       - name: Install deps
         run: uv sync --frozen
       - name: Run tests with coverage
-        run: uv run pytest
+        run: uv run pytest --cov --cov-report=xml:coverage.xml
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: apps/api/coverage.xml
+
+  build:
+    name: build & scan
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      ECR_REPOSITORY: petrocast/mock-api
+    outputs:
+      image_uri: ${{ steps.image.outputs.uri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.CI_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image URI
+        id: image
+        run: |
+          echo "uri=${ECR_REGISTRY}/${ECR_REPOSITORY}:sha-${{ steps.sha.outputs.short }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          push: false
+          load: true
+          tags: ${{ steps.image.outputs.uri }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.uri }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push canonical tag (sha-<short>)
+        run: docker push "${{ steps.image.outputs.uri }}"
+
+      - name: Push PR alias tag
+        if: github.event_name == 'pull_request'
+        run: |
+          PR_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:pr-${{ github.event.number }}-sha-${{ steps.sha.outputs.short }}"
+          docker tag "${{ steps.image.outputs.uri }}" "$PR_TAG"
+          docker push "$PR_TAG"
+
+      - name: Push staging-latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          STAGING_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:staging-latest"
+          docker tag "${{ steps.image.outputs.uri }}" "$STAGING_TAG"
+          docker push "$STAGING_TAG"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+
+  report:
+    name: upload reports to S3
+    needs: [test, build]
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.CI_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download coverage artifact
+        if: needs.test.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage
+          path: reports/coverage/
+
+      - name: Download Trivy artifact
+        if: needs.build.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-sarif
+          path: reports/trivy/
+
+      - name: Upload reports to S3
+        run: |
+          aws s3 cp reports/ "s3://${{ secrets.REPORTS_BUCKET }}/${{ github.run_id }}/" \
+            --recursive --no-progress

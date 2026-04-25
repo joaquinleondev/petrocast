@@ -1,0 +1,65 @@
+# Swarm stack template for mock-api — rendered with envsubst by deploy.sh.
+# Variables substituted at deploy time:
+#   IMAGE_URI    — full ECR image URI with tag (e.g. <account>.dkr.ecr.../petrocast/mock-api:sha-abc123)
+#   STACK_NAME   — stack identifier (pr-123, staging, prod)
+#   HOSTNAME     — FQDN for Traefik routing rule
+#   REPLICAS     — number of service replicas (1 for preview, 2 for staging/prod)
+#   ENV          — environment label (preview, staging, prod)
+#   API_KEY      — API key injected at runtime (from GitHub Secret)
+#   AWS_REGION   — AWS region for awslogs driver
+version: "3.9"
+
+services:
+  mock-api:
+    image: ${IMAGE_URI}
+    networks:
+      - traefik-public
+    environment:
+      - API_KEY=${API_KEY}
+      - LOG_LEVEL=INFO
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /petrocast/${ENV}/app
+        awslogs-stream: ${STACK_NAME}
+        awslogs-create-group: "true"
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      replicas: ${REPLICAS}
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.${STACK_NAME}.rule=Host(`${HOSTNAME}`)"
+        - "traefik.http.routers.${STACK_NAME}.entrypoints=websecure"
+        - "traefik.http.routers.${STACK_NAME}.tls.certresolver=le"
+        - "traefik.http.services.${STACK_NAME}.loadbalancer.server.port=8000"
+
+networks:
+  traefik-public:
+    external: true

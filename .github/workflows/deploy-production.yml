@@ -1,0 +1,189 @@
+name: deploy-production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  deploy:
+    name: deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is reachable from main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "Tag $GITHUB_REF_NAME does not point to a commit reachable from main" >&2
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME is reachable from main — OK"
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract semver tag
+        id: tag
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Verify image exists in ECR
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          aws ecr describe-images \
+            --repository-name "petrocast/mock-api" \
+            --region "$AWS_REGION" \
+            --image-ids "imageTag=sha-${SHORT_SHA}" \
+            --query "imageDetails[0].imageTags" \
+            --output text
+          echo "Image sha-${SHORT_SHA} confirmed in ECR"
+
+      - name: Create version tag alias in ECR (no rebuild)
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          # Get the manifest of the sha- tag and re-tag it as the version
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name "petrocast/mock-api" \
+            --region "$AWS_REGION" \
+            --image-ids "imageTag=sha-${SHORT_SHA}" \
+            --query "images[0].imageManifest" \
+            --output text)
+
+          aws ecr put-image \
+            --repository-name "petrocast/mock-api" \
+            --region "$AWS_REGION" \
+            --image-tag "$VERSION" \
+            --image-manifest "$MANIFEST"
+
+          echo "Created ECR tag ${VERSION} → sha-${SHORT_SHA}"
+
+      - name: Deploy via SSM
+        id: ssm
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          INSTANCE_ID: ${{ secrets.PROD_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          API_KEY: ${{ secrets.API_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n \
+              --arg cmd "export IMAGE_URI=\"${ECR_REGISTRY}/petrocast/mock-api:${VERSION}\"; \
+                export STACK_NAME=\"prod\"; \
+                export HOSTNAME=\"api.${DOMAIN}\"; \
+                export REPLICAS=\"2\"; \
+                export ENV=\"prod\"; \
+                export API_KEY=\"${API_KEY}\"; \
+                export AWS_REGION=\"${AWS_REGION}\"; \
+                export ECR_REGISTRY=\"${ECR_REGISTRY}\"; \
+                bash /opt/petrocast/deploy.sh" \
+              '{commands: [$cmd]}')" \
+            --cloud-watch-output-config \
+              "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
+            --query "Command.CommandId" \
+            --output text)
+          echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM command
+        env:
+          INSTANCE_ID: ${{ secrets.PROD_INSTANCE_ID }}
+        run: |
+          for i in $(seq 1 36); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${{ steps.ssm.outputs.command_id }}" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success)
+                echo "SSM command succeeded"
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
+                echo "SSM command failed: $STATUS" >&2
+                aws ssm get-command-invocation \
+                  --command-id "${{ steps.ssm.outputs.command_id }}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardErrorContent" --output text >&2 || true
+                exit 1
+                ;;
+              *)
+                echo "Waiting... status=$STATUS ($i/36)"
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for SSM command" >&2
+          exit 1
+
+      - name: Smoke test
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          PROD_URL="https://api.${DOMAIN}"
+          for attempt in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+              --max-time 10 "${PROD_URL}/health/ready" || echo "000")
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              echo "Smoke test passed — ${PROD_URL}"
+              exit 0
+            fi
+            echo "Not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
+            sleep 10
+          done
+          echo "Smoke test failed after 12 attempts" >&2
+          exit 1
+
+      - name: Rollback on smoke failure
+        if: failure()
+        env:
+          INSTANCE_ID: ${{ secrets.PROD_INSTANCE_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          echo "Smoke test failed — triggering Swarm rollback"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n \
+              --arg cmd "export STACK_NAME=\"prod\"; export AWS_REGION=\"${AWS_REGION}\"; bash /opt/petrocast/rollback.sh" \
+              '{commands: [$cmd]}')" \
+            --cloud-watch-output-config \
+              "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
+            --query "Command.CommandId" \
+            --output text)
+
+          for i in $(seq 1 18); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success) echo "Rollback complete"; break ;;
+              Failed|Cancelled|TimedOut|*TimedOut) echo "Rollback command failed: $STATUS" >&2; break ;;
+              *) echo "Rollback in progress... ($i/18)" ;;
+            esac
+            sleep 5
+          done
+          exit 1

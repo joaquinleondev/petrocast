@@ -1,0 +1,139 @@
+name: deploy-preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-pr-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy PR preview
+    runs-on: ubuntu-latest
+    environment: preview
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy via SSM
+        id: ssm
+        env:
+          PR_NUM: ${{ github.event.number }}
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          API_KEY: ${{ secrets.API_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n \
+              --arg cmd "export IMAGE_URI=\"${ECR_REGISTRY}/petrocast/mock-api:sha-${SHORT_SHA}\"; \
+                export STACK_NAME=\"pr-${PR_NUM}\"; \
+                export HOSTNAME=\"pr-${PR_NUM}.dev.${DOMAIN}\"; \
+                export REPLICAS=\"1\"; \
+                export ENV=\"preview\"; \
+                export API_KEY=\"${API_KEY}\"; \
+                export AWS_REGION=\"${AWS_REGION}\"; \
+                export ECR_REGISTRY=\"${ECR_REGISTRY}\"; \
+                bash /opt/petrocast/deploy.sh" \
+              '{commands: [$cmd]}')" \
+            --cloud-watch-output-config \
+              "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/preview/deploy" \
+            --query "Command.CommandId" \
+            --output text)
+          echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM command
+        env:
+          INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
+        run: |
+          for i in $(seq 1 36); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${{ steps.ssm.outputs.command_id }}" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success)
+                echo "SSM command succeeded"
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
+                echo "SSM command failed: $STATUS" >&2
+                aws ssm get-command-invocation \
+                  --command-id "${{ steps.ssm.outputs.command_id }}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardErrorContent" --output text >&2 || true
+                exit 1
+                ;;
+              *)
+                echo "Waiting... status=$STATUS ($i/36)"
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for SSM command" >&2
+          exit 1
+
+      - name: Smoke test
+        env:
+          PR_NUM: ${{ github.event.number }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          PREVIEW_URL="https://pr-${PR_NUM}.dev.${DOMAIN}"
+          for attempt in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+              --max-time 10 "${PREVIEW_URL}/health/ready" || echo "000")
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              echo "Smoke test passed — ${PREVIEW_URL}"
+              exit 0
+            fi
+            echo "Not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
+            sleep 10
+          done
+          echo "Smoke test failed after 12 attempts" >&2
+          exit 1
+
+      - name: Comment on PR (success)
+        if: success()
+        uses: actions/github-script@v7
+        env:
+          PR_NUM: ${{ github.event.number }}
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Preview deployed\n\n**URL:** https://pr-${process.env.PR_NUM}.dev.${process.env.DOMAIN}\n**Image:** \`sha-${process.env.SHORT_SHA}\`\n\n_Automatically torn down when this PR closes._`
+            })
+
+      - name: Comment on PR (failure)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Preview deploy failed\n\nCheck [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            })
