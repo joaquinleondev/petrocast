@@ -97,10 +97,14 @@ jobs:
           EOF
           cat infra/scripts/deploy.sh >> /tmp/deploy-cmd.sh
 
+          S=$(base64 -w0 /tmp/deploy-cmd.sh); H=$((${#S}/2))
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n --rawfile cmd /tmp/deploy-cmd.sh '{commands: [$cmd]}')" \
+            --parameters "$(jq -n \
+              --arg c1 "printf '%s' '${S:0:$H}' > /tmp/run.b64" \
+              --arg c2 "printf '%s' '${S:$H}' >> /tmp/run.b64 && base64 -d /tmp/run.b64 > /tmp/deploy-run.sh && bash /tmp/deploy-run.sh" \
+              '{commands: [$c1,$c2]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
             --query "Command.CommandId" \
@@ -159,10 +163,14 @@ jobs:
           EOF
           cat infra/scripts/rollback.sh >> /tmp/rollback-cmd.sh
 
+          RS=$(base64 -w0 /tmp/rollback-cmd.sh); RH=$((${#RS}/2))
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n --rawfile cmd /tmp/rollback-cmd.sh '{commands: [$cmd]}')" \
+            --parameters "$(jq -n \
+              --arg c1 "printf '%s' '${RS:0:$RH}' > /tmp/rb.b64" \
+              --arg c2 "printf '%s' '${RS:$RH}' >> /tmp/rb.b64 && base64 -d /tmp/rb.b64 > /tmp/rollback-run.sh && bash /tmp/rollback-run.sh" \
+              '{commands: [$c1,$c2]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
             --query "Command.CommandId" \

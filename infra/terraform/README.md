@@ -18,6 +18,7 @@ make bootstrap
 ```
 
 Crea:
+
 - S3 bucket `petrocast-tf-state-<random>` (versioning + encryption)
 - DynamoDB table `petrocast-tf-locks`
 
@@ -38,6 +39,7 @@ make apply-shared
 ```
 
 **Después de este apply:**
+
 - Copiar los 4 NS records del output `route53_nameservers` al registrador del dominio.
 - Esperar propagación DNS (~15–60 min).
 
@@ -64,42 +66,42 @@ make output-prod
 
 **Secrets a nivel repo (`Settings → Secrets → Actions`):**
 
-| Secret | Valor |
-|--------|-------|
-| `AWS_REGION` | `us-east-1` |
-| `ECR_REGISTRY` | output `ecr_repository_url` de shared (sin `/petrocast/mock-api`) |
-| `CI_ROLE_ARN` | output `ci_role_arn` de shared |
-| `TF_ROLE_ARN` | output `ci_role_arn` de shared (mismo rol) |
-| `TF_STATE_BUCKET` | nombre del bucket del bootstrap |
-| `TF_LOCK_TABLE` | `petrocast-tf-locks` |
-| `DOMAIN` | `petrocast.shop` |
-| `REPORTS_BUCKET` | output `reports_bucket` de shared |
+| Secret            | Valor                                                             |
+| ----------------- | ----------------------------------------------------------------- |
+| `AWS_REGION`      | `us-east-1`                                                       |
+| `ECR_REGISTRY`    | output `ecr_repository_url` de shared (sin `/petrocast/mock-api`) |
+| `CI_ROLE_ARN`     | output `ci_role_arn` de shared                                    |
+| `TF_ROLE_ARN`     | output `ci_role_arn` de shared (mismo rol)                        |
+| `TF_STATE_BUCKET` | nombre del bucket del bootstrap                                   |
+| `TF_LOCK_TABLE`   | `petrocast-tf-locks`                                              |
+| `DOMAIN`          | `petrocast.shop`                                                  |
+| `REPORTS_BUCKET`  | output `reports_bucket` de shared                                 |
 
 **Secrets por environment (`Settings → Environments`):**
 
 Environment `preview`:
 
-| Secret | Valor |
-|--------|-------|
-| `DEPLOY_ROLE_ARN` | output `deploy_role_arn` de shared |
-| `PREVIEW_INSTANCE_ID` | output `instance_id` de preview |
-| `API_KEY` | clave API del servicio |
+| Secret                | Valor                              |
+| --------------------- | ---------------------------------- |
+| `DEPLOY_ROLE_ARN`     | output `deploy_role_arn` de shared |
+| `PREVIEW_INSTANCE_ID` | output `instance_id` de preview    |
+| `API_KEY`             | clave API del servicio             |
 
 Environment `staging`:
 
-| Secret | Valor |
-|--------|-------|
-| `DEPLOY_ROLE_ARN` | output `deploy_role_arn` de shared |
-| `STAGING_INSTANCE_ID` | output `instance_id` de staging |
-| `API_KEY` | clave API del servicio |
+| Secret                | Valor                              |
+| --------------------- | ---------------------------------- |
+| `DEPLOY_ROLE_ARN`     | output `deploy_role_arn` de shared |
+| `STAGING_INSTANCE_ID` | output `instance_id` de staging    |
+| `API_KEY`             | clave API del servicio             |
 
 Environment `production`:
 
-| Secret | Valor |
-|--------|-------|
-| `DEPLOY_ROLE_ARN` | output `deploy_role_arn` de shared |
-| `PROD_INSTANCE_ID` | output `instance_id` de prod |
-| `API_KEY` | clave API del servicio |
+| Secret             | Valor                              |
+| ------------------ | ---------------------------------- |
+| `DEPLOY_ROLE_ARN`  | output `deploy_role_arn` de shared |
+| `PROD_INSTANCE_ID` | output `instance_id` de prod       |
+| `API_KEY`          | clave API del servicio             |
 
 **Configurar environment `production` con required reviewers** (`Settings → Environments → production → Required reviewers`).
 
