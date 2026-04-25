@@ -19,6 +19,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Compute short SHA
         id: sha
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -40,20 +42,23 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
+          # Write env vars (GHA expands) + append deploy logic from repo
+          cat > /tmp/deploy-cmd.sh << EOF
+          export IMAGE_URI="${ECR_REGISTRY}/petrocast/mock-api:sha-${SHORT_SHA}"
+          export STACK_NAME="pr-${PR_NUM}"
+          export HOSTNAME="pr-${PR_NUM}.dev.${DOMAIN}"
+          export REPLICAS="1"
+          export ENV="preview"
+          export API_KEY="${API_KEY}"
+          export AWS_REGION="${AWS_REGION}"
+          export ECR_REGISTRY="${ECR_REGISTRY}"
+          EOF
+          cat infra/scripts/deploy.sh >> /tmp/deploy-cmd.sh
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n \
-              --arg cmd "export IMAGE_URI=\"${ECR_REGISTRY}/petrocast/mock-api:sha-${SHORT_SHA}\"; \
-                export STACK_NAME=\"pr-${PR_NUM}\"; \
-                export HOSTNAME=\"pr-${PR_NUM}.dev.${DOMAIN}\"; \
-                export REPLICAS=\"1\"; \
-                export ENV=\"preview\"; \
-                export API_KEY=\"${API_KEY}\"; \
-                export AWS_REGION=\"${AWS_REGION}\"; \
-                export ECR_REGISTRY=\"${ECR_REGISTRY}\"; \
-                bash /opt/petrocast/deploy.sh" \
-              '{commands: [$cmd]}')" \
+            --parameters "$(jq -n --rawfile cmd /tmp/deploy-cmd.sh '{commands: [$cmd]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/preview/deploy" \
             --query "Command.CommandId" \
@@ -70,26 +75,19 @@ jobs:
               --instance-id "$INSTANCE_ID" \
               --query "Status" --output text 2>/dev/null || echo "Pending")
             case "$STATUS" in
-              Success)
-                echo "SSM command succeeded"
-                exit 0
-                ;;
+              Success) echo "SSM command succeeded"; exit 0 ;;
               Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
                 echo "SSM command failed: $STATUS" >&2
                 aws ssm get-command-invocation \
                   --command-id "${{ steps.ssm.outputs.command_id }}" \
                   --instance-id "$INSTANCE_ID" \
                   --query "StandardErrorContent" --output text >&2 || true
-                exit 1
-                ;;
-              *)
-                echo "Waiting... status=$STATUS ($i/36)"
-                ;;
+                exit 1 ;;
+              *) echo "Waiting... status=$STATUS ($i/36)" ;;
             esac
             sleep 5
           done
-          echo "Timed out waiting for SSM command" >&2
-          exit 1
+          echo "Timed out" >&2; exit 1
 
       - name: Smoke test
         env:
@@ -101,14 +99,12 @@ jobs:
             HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
               --max-time 10 "${PREVIEW_URL}/health/ready" || echo "000")
             if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "Smoke test passed — ${PREVIEW_URL}"
-              exit 0
+              echo "Smoke test passed — ${PREVIEW_URL}"; exit 0
             fi
             echo "Not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
             sleep 10
           done
-          echo "Smoke test failed after 12 attempts" >&2
-          exit 1
+          echo "Smoke test failed after 12 attempts" >&2; exit 1
 
       - name: Comment on PR (success)
         if: success()

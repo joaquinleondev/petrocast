@@ -102,6 +102,20 @@ resource "aws_iam_role_policy" "ecr_read" {
   policy = data.aws_iam_policy_document.ecr_read.json
 }
 
+data "aws_iam_policy_document" "s3_artifacts_read" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = [var.artifacts_bucket_arn, "${var.artifacts_bucket_arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "s3_artifacts_read" {
+  name   = "s3-artifacts-read"
+  role   = aws_iam_role.this.id
+  policy = data.aws_iam_policy_document.s3_artifacts_read.json
+}
+
 data "aws_iam_policy_document" "cloudwatch_logs" {
   statement {
     effect = "Allow"

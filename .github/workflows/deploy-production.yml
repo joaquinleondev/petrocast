@@ -58,10 +58,8 @@ jobs:
         env:
           SHORT_SHA: ${{ steps.sha.outputs.short }}
           VERSION: ${{ steps.tag.outputs.version }}
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          # Get the manifest of the sha- tag and re-tag it as the version
           MANIFEST=$(aws ecr batch-get-image \
             --repository-name "petrocast/mock-api" \
             --region "$AWS_REGION" \
@@ -87,20 +85,22 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           DOMAIN: ${{ secrets.DOMAIN }}
         run: |
+          cat > /tmp/deploy-cmd.sh << EOF
+          export IMAGE_URI="${ECR_REGISTRY}/petrocast/mock-api:${VERSION}"
+          export STACK_NAME="prod"
+          export HOSTNAME="api.${DOMAIN}"
+          export REPLICAS="2"
+          export ENV="prod"
+          export API_KEY="${API_KEY}"
+          export AWS_REGION="${AWS_REGION}"
+          export ECR_REGISTRY="${ECR_REGISTRY}"
+          EOF
+          cat infra/scripts/deploy.sh >> /tmp/deploy-cmd.sh
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n \
-              --arg cmd "export IMAGE_URI=\"${ECR_REGISTRY}/petrocast/mock-api:${VERSION}\"; \
-                export STACK_NAME=\"prod\"; \
-                export HOSTNAME=\"api.${DOMAIN}\"; \
-                export REPLICAS=\"2\"; \
-                export ENV=\"prod\"; \
-                export API_KEY=\"${API_KEY}\"; \
-                export AWS_REGION=\"${AWS_REGION}\"; \
-                export ECR_REGISTRY=\"${ECR_REGISTRY}\"; \
-                bash /opt/petrocast/deploy.sh" \
-              '{commands: [$cmd]}')" \
+            --parameters "$(jq -n --rawfile cmd /tmp/deploy-cmd.sh '{commands: [$cmd]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
             --query "Command.CommandId" \
@@ -117,26 +117,19 @@ jobs:
               --instance-id "$INSTANCE_ID" \
               --query "Status" --output text 2>/dev/null || echo "Pending")
             case "$STATUS" in
-              Success)
-                echo "SSM command succeeded"
-                exit 0
-                ;;
+              Success) echo "SSM command succeeded"; exit 0 ;;
               Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
                 echo "SSM command failed: $STATUS" >&2
                 aws ssm get-command-invocation \
                   --command-id "${{ steps.ssm.outputs.command_id }}" \
                   --instance-id "$INSTANCE_ID" \
                   --query "StandardErrorContent" --output text >&2 || true
-                exit 1
-                ;;
-              *)
-                echo "Waiting... status=$STATUS ($i/36)"
-                ;;
+                exit 1 ;;
+              *) echo "Waiting... status=$STATUS ($i/36)" ;;
             esac
             sleep 5
           done
-          echo "Timed out waiting for SSM command" >&2
-          exit 1
+          echo "Timed out" >&2; exit 1
 
       - name: Smoke test
         env:
@@ -147,14 +140,12 @@ jobs:
             HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
               --max-time 10 "${PROD_URL}/health/ready" || echo "000")
             if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "Smoke test passed — ${PROD_URL}"
-              exit 0
+              echo "Smoke test passed — ${PROD_URL}"; exit 0
             fi
             echo "Not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
             sleep 10
           done
-          echo "Smoke test failed after 12 attempts" >&2
-          exit 1
+          echo "Smoke test failed after 12 attempts" >&2; exit 1
 
       - name: Rollback on smoke failure
         if: failure()
@@ -162,13 +153,16 @@ jobs:
           INSTANCE_ID: ${{ secrets.PROD_INSTANCE_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          echo "Smoke test failed — triggering Swarm rollback"
+          cat > /tmp/rollback-cmd.sh << EOF
+          export STACK_NAME="prod"
+          export AWS_REGION="${AWS_REGION}"
+          EOF
+          cat infra/scripts/rollback.sh >> /tmp/rollback-cmd.sh
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n \
-              --arg cmd "export STACK_NAME=\"prod\"; export AWS_REGION=\"${AWS_REGION}\"; bash /opt/petrocast/rollback.sh" \
-              '{commands: [$cmd]}')" \
+            --parameters "$(jq -n --rawfile cmd /tmp/rollback-cmd.sh '{commands: [$cmd]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/prod/deploy" \
             --query "Command.CommandId" \
@@ -176,12 +170,11 @@ jobs:
 
           for i in $(seq 1 18); do
             STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
               --query "Status" --output text 2>/dev/null || echo "Pending")
             case "$STATUS" in
               Success) echo "Rollback complete"; break ;;
-              Failed|Cancelled|TimedOut|*TimedOut) echo "Rollback command failed: $STATUS" >&2; break ;;
+              Failed|Cancelled|TimedOut|*TimedOut) echo "Rollback failed: $STATUS" >&2; break ;;
               *) echo "Rollback in progress... ($i/18)" ;;
             esac
             sleep 5

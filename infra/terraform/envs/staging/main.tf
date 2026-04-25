@@ -24,7 +24,8 @@ module "ec2" {
   instance_type     = var.instance_type
   aws_region        = var.aws_region
   ecr_registry_id   = local.shared.ecr_registry_id
-  enable_dns01_acme = false
+  enable_dns01_acme    = false
+  artifacts_bucket_arn = local.shared.artifacts_bucket_arn
 
   user_data_base64 = base64encode(templatefile(
     "${path.module}/../../../scripts/bootstrap-swarm.sh",

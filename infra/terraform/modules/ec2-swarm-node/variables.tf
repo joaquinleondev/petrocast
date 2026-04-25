@@ -57,6 +57,11 @@ variable "enable_dns01_acme" {
   description = "Grant Route 53 write to the instance profile for Traefik DNS-01 ACME"
 }
 
+variable "artifacts_bucket_arn" {
+  type        = string
+  description = "ARN of the S3 artifacts bucket — grants EC2 read access for bootstrap scripts"
+}
+
 variable "cloudwatch_log_group_arns" {
   type        = list(string)
   default     = []

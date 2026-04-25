@@ -43,6 +43,11 @@ output "artifacts_bucket" {
   description = "Pipeline artifacts bucket name"
 }
 
+output "artifacts_bucket_arn" {
+  value       = module.s3_artifacts.artifacts_bucket_arn
+  description = "Pipeline artifacts bucket ARN — used by EC2 instance profile"
+}
+
 output "reports_bucket" {
   value       = module.s3_artifacts.reports_bucket
   description = "Test reports bucket name"
