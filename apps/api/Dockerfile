@@ -1,5 +1,5 @@
 # ── builder: instala deps de producción con lockfile ─────────────────────────
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12-slim-trixie AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -13,7 +13,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 # ── runtime: imagen mínima, sin build deps, usuario no-root ──────────────────
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-trixie AS runtime
 
 ARG BUILD_VERSION=dev
 ARG BUILD_REVISION=unknown

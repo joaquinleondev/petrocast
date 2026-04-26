@@ -59,7 +59,9 @@ jobs:
 
       - name: Compute short SHA
         id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "short=${SOURCE_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -74,6 +76,7 @@ jobs:
         id: image
         run: |
           echo "uri=${ECR_REGISTRY}/${ECR_REPOSITORY}:sha-${{ steps.sha.outputs.short }}" >> "$GITHUB_OUTPUT"
+          echo "local=petrocast-mock-api:sha-${{ steps.sha.outputs.short }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -85,14 +88,16 @@ jobs:
           push: false
           load: true
           pull: true
-          tags: ${{ steps.image.outputs.uri }}
+          tags: |
+            ${{ steps.image.outputs.local }}
+            ${{ steps.image.outputs.uri }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ${{ steps.image.outputs.uri }}
+          image-ref: ${{ steps.image.outputs.local }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
