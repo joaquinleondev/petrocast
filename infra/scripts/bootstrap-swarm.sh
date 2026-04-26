@@ -25,7 +25,7 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q docker.io docker-compose-plugin awscli jq gettext-base
+apt-get install -y -q docker.io awscli jq gettext-base
 
 systemctl enable --now docker
 
