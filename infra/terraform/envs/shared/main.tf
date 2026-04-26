@@ -19,12 +19,22 @@ module "s3_artifacts" {
   project = var.project
 }
 
+data "aws_s3_bucket" "tf_state" {
+  bucket = var.tf_state_bucket_name
+}
+
+data "aws_dynamodb_table" "tf_locks" {
+  name = var.tf_lock_table_name
+}
+
 module "iam_github_oidc" {
   source               = "../../modules/iam-github-oidc"
   github_repo          = var.github_repo
   ecr_repository_arn   = module.ecr.repository_arn
   artifacts_bucket_arn = module.s3_artifacts.artifacts_bucket_arn
   reports_bucket_arn   = module.s3_artifacts.reports_bucket_arn
+  tf_state_bucket_arn  = data.aws_s3_bucket.tf_state.arn
+  tf_lock_table_arn    = data.aws_dynamodb_table.tf_locks.arn
 }
 
 module "cloudwatch" {

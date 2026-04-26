@@ -1,10 +1,10 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  oidc_url    = "https://token.actions.githubusercontent.com"
-  oidc_host   = "token.actions.githubusercontent.com"
+  oidc_url  = "https://token.actions.githubusercontent.com"
+  oidc_host = "token.actions.githubusercontent.com"
   # AWS no longer validates thumbprints for GitHub's OIDC endpoint but the field is required.
-  thumbprint  = "6938fd4d98bab03faadb97b34396831e3780aea1"
+  thumbprint = "6938fd4d98bab03faadb97b34396831e3780aea1"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -81,6 +81,30 @@ data "aws_iam_policy_document" "ci_permissions" {
       "${var.reports_bucket_arn}/*",
     ]
   }
+
+  # Terraform remote state — read for tf-plan
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket",
+    ]
+    resources = [
+      var.tf_state_bucket_arn,
+      "${var.tf_state_bucket_arn}/*",
+    ]
+  }
+
+  # Terraform DynamoDB lock — acquire/release during plan
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+    ]
+    resources = [var.tf_lock_table_arn]
+  }
 }
 
 resource "aws_iam_role" "ci" {
@@ -93,6 +117,12 @@ resource "aws_iam_role_policy" "ci" {
   name   = "github-actions-ci-policy"
   role   = aws_iam_role.ci.id
   policy = data.aws_iam_policy_document.ci_permissions.json
+}
+
+# Terraform plan needs read on every resource it manages — attach managed ReadOnlyAccess.
+resource "aws_iam_role_policy_attachment" "ci_readonly" {
+  role       = aws_iam_role.ci.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
 # ── deploy-role: assumed only from main, v* tags, or explicit environments ────

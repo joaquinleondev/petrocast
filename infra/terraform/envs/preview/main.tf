@@ -16,14 +16,14 @@ locals {
 module "ec2" {
   source = "../../modules/ec2-swarm-node"
 
-  name              = "swarm-preview-dev"
-  env               = "preview"
-  project           = var.project
-  vpc_id            = local.shared.vpc_id
-  subnet_id         = local.shared.public_subnet_ids[0]
-  instance_type     = var.instance_type
-  aws_region        = var.aws_region
-  ecr_registry_id   = local.shared.ecr_registry_id
+  name                 = "swarm-preview-dev"
+  env                  = "preview"
+  project              = var.project
+  vpc_id               = local.shared.vpc_id
+  subnet_id            = local.shared.public_subnet_ids[0]
+  instance_type        = var.instance_type
+  aws_region           = var.aws_region
+  ecr_registry_id      = local.shared.ecr_registry_id
   enable_dns01_acme    = true
   route53_zone_id      = local.shared.route53_zone_id
   artifacts_bucket_arn = local.shared.artifacts_bucket_arn

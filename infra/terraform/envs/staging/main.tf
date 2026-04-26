@@ -16,14 +16,14 @@ locals {
 module "ec2" {
   source = "../../modules/ec2-swarm-node"
 
-  name              = "swarm-staging"
-  env               = "staging"
-  project           = var.project
-  vpc_id            = local.shared.vpc_id
-  subnet_id         = local.shared.public_subnet_ids[1]
-  instance_type     = var.instance_type
-  aws_region        = var.aws_region
-  ecr_registry_id   = local.shared.ecr_registry_id
+  name                 = "swarm-staging"
+  env                  = "staging"
+  project              = var.project
+  vpc_id               = local.shared.vpc_id
+  subnet_id            = local.shared.public_subnet_ids[1]
+  instance_type        = var.instance_type
+  aws_region           = var.aws_region
+  ecr_registry_id      = local.shared.ecr_registry_id
   enable_dns01_acme    = false
   artifacts_bucket_arn = local.shared.artifacts_bucket_arn
 

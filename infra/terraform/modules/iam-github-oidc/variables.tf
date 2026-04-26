@@ -18,6 +18,16 @@ variable "reports_bucket_arn" {
   description = "ARN of the test reports S3 bucket"
 }
 
+variable "tf_state_bucket_arn" {
+  type        = string
+  description = "ARN of the Terraform remote state S3 bucket — granted to ci-role for tf-plan jobs"
+}
+
+variable "tf_lock_table_arn" {
+  type        = string
+  description = "ARN of the Terraform DynamoDB lock table — granted to ci-role for tf-plan jobs"
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

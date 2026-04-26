@@ -25,8 +25,13 @@ aws ecr get-login-password --region "$AWS_REGION" | \
 RENDERED="/tmp/stack-${STACK_NAME}.yml"
 
 # Substitute all declared template variables; leave any unknown ${} patterns untouched.
+# Stack template is shipped inline by the GitHub Actions workflow (see deploy-*.yml).
+STACK_TEMPLATE="/tmp/mock-api.stack.yml"
+if [[ ! -f "$STACK_TEMPLATE" ]]; then
+  STACK_TEMPLATE="/opt/petrocast/mock-api.stack.yml"
+fi
 envsubst '${IMAGE_URI} ${STACK_NAME} ${HOSTNAME} ${REPLICAS} ${ENV} ${API_KEY} ${AWS_REGION}' \
-  < /opt/petrocast/mock-api.stack.yml > "$RENDERED"
+  < "$STACK_TEMPLATE" > "$RENDERED"
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 docker stack deploy -c "$RENDERED" "$STACK_NAME" --with-registry-auth

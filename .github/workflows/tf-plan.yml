@@ -48,6 +48,9 @@ jobs:
 
       - name: Terraform plan
         id: plan
+        env:
+          TF_VAR_tf_state_bucket_name: ${{ secrets.TF_STATE_BUCKET }}
+          TF_VAR_tf_lock_table_name: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           terraform plan -no-color -out=tfplan 2>&1 | tee plan-output.txt
           echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"

@@ -9,7 +9,7 @@ output "lock_table" {
 }
 
 output "backend_config" {
-  value = <<-EOT
+  value       = <<-EOT
     # infra/terraform/backend.config
     bucket         = "${aws_s3_bucket.tf_state.bucket}"
     region         = "${var.aws_region}"

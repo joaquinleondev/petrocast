@@ -19,11 +19,20 @@ fmt:
 validate-%:
 	cd envs/$* && terraform init $(TF_FLAGS) && terraform validate
 
-## plan-%: Plan a specific env (e.g. make plan-shared)
+## plan-shared / apply-shared: needs bootstrap outputs as TF_VAR_*
+plan-shared apply-shared:
+	@BS_BUCKET=$$(cd bootstrap && terraform output -raw state_bucket); \
+	BS_TABLE=$$(cd bootstrap && terraform output -raw lock_table); \
+	cd envs/shared && terraform init $(TF_FLAGS) && \
+	  TF_VAR_tf_state_bucket_name=$$BS_BUCKET \
+	  TF_VAR_tf_lock_table_name=$$BS_TABLE \
+	  terraform $(subst -shared,,$@)
+
+## plan-%: Plan a specific env (e.g. make plan-preview)
 plan-%:
 	cd envs/$* && terraform init $(TF_FLAGS) && terraform plan
 
-## apply-%: Apply a specific env (e.g. make apply-shared)
+## apply-%: Apply a specific env (e.g. make apply-preview)
 apply-%:
 	cd envs/$* && terraform init $(TF_FLAGS) && terraform apply
 
