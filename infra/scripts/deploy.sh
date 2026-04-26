@@ -65,25 +65,7 @@ for i in $(seq 1 36); do
   sleep 5
 done
 
-# ── Health check ──────────────────────────────────────────────────────────────
-echo "Running health check..."
-for attempt in $(seq 1 12); do
-  HTTP_CODE=$(docker run --rm --network host \
-    curlimages/curl:latest curl -s -o /dev/null -w '%{http_code}' \
-    "http://localhost:8000/health/ready" 2>/dev/null || echo "000")
-
-  if [[ "$HTTP_CODE" == "200" ]]; then
-    echo "Health check passed (HTTP $HTTP_CODE)"
-    break
-  fi
-
-  if [[ "$attempt" -eq 12 ]]; then
-    echo "Health check failed after 12 attempts (last HTTP $HTTP_CODE)" >&2
-    exit 1
-  fi
-
-  echo "Health not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
-  sleep 5
-done
+# Container healthcheck + Swarm rollback gate convergence.
+# External validation happens in the workflow's Smoke test step via Traefik.
 
 echo "[$(date -u)] Deploy success — stack=$STACK_NAME"
