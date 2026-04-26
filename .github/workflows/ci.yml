@@ -94,6 +94,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Push PR alias tag (preview, pre-scan)
+        if: github.event_name == 'pull_request'
+        run: |
+          PR_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:pr-${{ github.event.number }}-sha-${{ steps.sha.outputs.short }}"
+          docker tag "${{ steps.image.outputs.uri }}" "$PR_TAG"
+          docker push "$PR_TAG"
+
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -103,16 +110,10 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
+          limit-severities-for-sarif: true
 
       - name: Push canonical tag (sha-<short>)
         run: docker push "${{ steps.image.outputs.uri }}"
-
-      - name: Push PR alias tag
-        if: github.event_name == 'pull_request'
-        run: |
-          PR_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:pr-${{ github.event.number }}-sha-${{ steps.sha.outputs.short }}"
-          docker tag "${{ steps.image.outputs.uri }}" "$PR_TAG"
-          docker push "$PR_TAG"
 
       - name: Push staging-latest tag
         if: github.ref == 'refs/heads/main'

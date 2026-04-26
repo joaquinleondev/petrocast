@@ -31,6 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
     rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --upgrade "pip>=26.0" && \
     groupadd -g 10001 app && \
     useradd -r -u 10001 -g app app
 
