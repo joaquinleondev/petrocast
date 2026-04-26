@@ -82,7 +82,7 @@ data "aws_iam_policy_document" "ci_permissions" {
     ]
   }
 
-  # Terraform remote state — read for tf-plan
+  # Terraform remote state: read state and create/delete S3 native lockfiles for tf-plan.
   statement {
     effect = "Allow"
     actions = [
@@ -95,15 +95,14 @@ data "aws_iam_policy_document" "ci_permissions" {
     ]
   }
 
-  # Terraform DynamoDB lock — acquire/release during plan
   statement {
     effect = "Allow"
     actions = [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:DeleteItem",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
     ]
-    resources = [var.tf_lock_table_arn]
+    resources = ["${var.tf_state_bucket_arn}/*.tflock"]
   }
 }
 

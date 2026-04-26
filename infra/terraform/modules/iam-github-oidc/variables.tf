@@ -20,12 +20,7 @@ variable "reports_bucket_arn" {
 
 variable "tf_state_bucket_arn" {
   type        = string
-  description = "ARN of the Terraform remote state S3 bucket — granted to ci-role for tf-plan jobs"
-}
-
-variable "tf_lock_table_arn" {
-  type        = string
-  description = "ARN of the Terraform DynamoDB lock table — granted to ci-role for tf-plan jobs"
+  description = "ARN of the Terraform remote state S3 bucket — granted to ci-role for tf-plan jobs and S3 lockfiles"
 }
 
 variable "tags" {

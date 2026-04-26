@@ -1,19 +1,18 @@
 # Traefik stack for preview/dev — ACME DNS-01 challenge with Route 53.
-# Issues a wildcard cert for *.dev.petrocast.shop (one cert for all PR previews).
+# Uses DNS-01 so PR preview hosts under *.dev.petrocast.shop can get certificates.
 # EC2 instance profile must have route53:ChangeResourceRecordSets on the hosted zone.
 # ${ACME_EMAIL} and ${AWS_REGION} are substituted by envsubst at deploy time.
-version: "3.9"
 
 services:
   traefik:
-    image: traefik:v2.11
+    image: traefik:v3.6.13
     command:
       - --api.dashboard=false
       - --log.level=INFO
-      - --providers.docker=true
-      - --providers.docker.swarmMode=true
-      - --providers.docker.exposedByDefault=false
-      - --providers.docker.network=traefik-public
+      - --providers.swarm=true
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedByDefault=false
+      - --providers.swarm.network=traefik-public
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entryPoint.to=websecure

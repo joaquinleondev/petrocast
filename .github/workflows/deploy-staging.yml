@@ -13,14 +13,14 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute short SHA
         id: sha
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -30,12 +30,24 @@ jobs:
           SHORT_SHA: ${{ steps.sha.outputs.short }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws ecr describe-images \
-            --repository-name "petrocast/mock-api" \
-            --region "$AWS_REGION" \
-            --image-ids "imageTag=sha-${SHORT_SHA}" \
-            --query "imageDetails[0].imageTags" \
-            --output text
+          FOUND=0
+          for attempt in $(seq 1 24); do
+            if aws ecr describe-images \
+              --repository-name "petrocast/mock-api" \
+              --region "$AWS_REGION" \
+              --image-ids "imageTag=sha-${SHORT_SHA}" \
+              --query "imageDetails[0].imageTags" \
+              --output text; then
+              FOUND=1
+              break
+            fi
+            echo "Waiting for image sha-${SHORT_SHA} in ECR (attempt $attempt/24)"
+            sleep 10
+          done
+          if [[ "$FOUND" != "1" ]]; then
+            echo "Image sha-${SHORT_SHA} was not found in ECR" >&2
+            exit 1
+          fi
           echo "Image sha-${SHORT_SHA} confirmed in ECR"
 
       - name: Deploy via SSM

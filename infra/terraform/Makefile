@@ -3,7 +3,7 @@ TF_FLAGS      := -backend-config=$(BACKEND_CONFIG) -input=false
 
 .PHONY: bootstrap plan-% apply-% destroy-% fmt validate
 
-## bootstrap: Create S3 state bucket + DynamoDB lock table (run once, locally)
+## bootstrap: Create S3 state bucket for remote state and native lockfiles (run once, locally)
 bootstrap:
 	@echo "==> Bootstrapping Terraform state backend..."
 	cd bootstrap && terraform init && terraform apply
@@ -22,10 +22,8 @@ validate-%:
 ## plan-shared / apply-shared: needs bootstrap outputs as TF_VAR_*
 plan-shared apply-shared:
 	@BS_BUCKET=$$(cd bootstrap && terraform output -raw state_bucket); \
-	BS_TABLE=$$(cd bootstrap && terraform output -raw lock_table); \
 	cd envs/shared && terraform init $(TF_FLAGS) && \
 	  TF_VAR_tf_state_bucket_name=$$BS_BUCKET \
-	  TF_VAR_tf_lock_table_name=$$BS_TABLE \
 	  terraform $(subst -shared,,$@)
 
 ## plan-%: Plan a specific env (e.g. make plan-preview)

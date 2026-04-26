@@ -4,7 +4,7 @@
 
 1. **Dominio**: Registrar/delegar `petrocast.shop` a Route 53. Terraform crea la hosted zone y expone los NS como output. Tras `apply-shared`, copiar los 4 NS records al registrador.
 2. **Bootstrap IAM**: Usuario IAM local con permisos admin solo para el primer `apply-bootstrap`. Tras eso, todos los applies usan OIDC.
-3. **Herramientas**: `terraform >= 1.9`, `aws-cli >= 2`, `make`.
+3. **Herramientas**: `terraform >= 1.14`, `aws-cli >= 2`, `make`.
 
 ---
 
@@ -20,16 +20,17 @@ make bootstrap
 Crea:
 
 - S3 bucket `petrocast-tf-state-<random>` (versioning + encryption)
-- DynamoDB table `petrocast-tf-locks`
+- Locking nativo de Terraform S3 con archivos `.tflock` (`use_lockfile = true`)
 
-Guarda el output del bucket/table — se necesitan para crear `backend.config`.
+Guarda el output del bucket — se necesita para crear `backend.config`.
 
 Crear `infra/terraform/backend.config` (gitignoreado):
 
 ```hcl
 bucket         = "<bucket-name-del-output>"
-dynamodb_table = "petrocast-tf-locks"
 region         = "us-east-1"
+use_lockfile   = true
+encrypt        = true
 ```
 
 ### 2. Shared (ECR, VPC, Route53, IAM OIDC, S3, CloudWatch)
@@ -73,7 +74,6 @@ make output-prod
 | `CI_ROLE_ARN`     | output `ci_role_arn` de shared                                    |
 | `TF_ROLE_ARN`     | output `ci_role_arn` de shared (mismo rol)                        |
 | `TF_STATE_BUCKET` | nombre del bucket del bootstrap                                   |
-| `TF_LOCK_TABLE`   | `petrocast-tf-locks`                                              |
 | `DOMAIN`          | `petrocast.shop`                                                  |
 | `REPORTS_BUCKET`  | output `reports_bucket` de shared                                 |
 
@@ -123,7 +123,7 @@ modules/
 ## Makefile targets
 
 ```bash
-make bootstrap         # one-shot: crea S3 state + DynamoDB
+make bootstrap         # one-shot: crea S3 state bucket + lockfiles nativos
 make plan-shared       # terraform plan para envs/shared
 make apply-shared      # terraform apply para envs/shared
 make plan-preview      # terraform plan para envs/preview

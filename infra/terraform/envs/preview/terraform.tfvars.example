@@ -1,5 +1,4 @@
 # Copy to terraform.tfvars (gitignored) and fill in your values.
 # state_bucket: from `make output-bootstrap` → state_bucket output
 state_bucket       = "petrocast-tf-state-XXXXXXXX"
-state_lock_table   = "petrocast-tf-locks"
 traefik_acme_email = "your@email.com"

@@ -2,5 +2,5 @@
 # backend.config is gitignored — never commit it.
 bucket         = "petrocast-tf-state-XXXXXXXX"
 region         = "us-east-1"
-dynamodb_table = "petrocast-tf-locks"
+use_lockfile   = true
 encrypt        = true

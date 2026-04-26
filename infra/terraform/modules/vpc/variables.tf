@@ -9,10 +9,15 @@ variable "cidr" {
   description = "VPC CIDR block"
 }
 
-variable "availability_zones" {
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
-  description = "AZs for public subnets"
+variable "public_subnet_count" {
+  type        = number
+  default     = 2
+  description = "Number of public subnets to create across the current region's available AZs"
+
+  validation {
+    condition     = var.public_subnet_count >= 2
+    error_message = "public_subnet_count must be at least 2."
+  }
 }
 
 variable "tags" {

@@ -1,3 +1,12 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
+
 resource "aws_vpc" "this" {
   cidr_block           = var.cidr
   enable_dns_hostnames = true
@@ -7,15 +16,15 @@ resource "aws_vpc" "this" {
 }
 
 resource "aws_subnet" "public" {
-  count = length(var.availability_zones)
+  count = var.public_subnet_count
 
   vpc_id                  = aws_vpc.this.id
   cidr_block              = cidrsubnet(var.cidr, 8, count.index)
-  availability_zone       = var.availability_zones[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
 
   tags = merge(
-    { Name = "${var.project}-public-${var.availability_zones[count.index]}" },
+    { Name = "${var.project}-public-${data.aws_availability_zones.available.names[count.index]}" },
     var.tags,
   )
 }

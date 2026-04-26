@@ -5,7 +5,7 @@ variable "project" {
 
 variable "aws_region" {
   type    = string
-  default = "us-east-1"
+  default = "us-east-2"
 }
 
 variable "domain" {
@@ -25,10 +25,5 @@ variable "vpc_cidr" {
 
 variable "tf_state_bucket_name" {
   type        = string
-  description = "Terraform remote state S3 bucket name (output of bootstrap) — granted read to ci-role"
-}
-
-variable "tf_lock_table_name" {
-  type        = string
-  description = "Terraform DynamoDB lock table name (output of bootstrap) — granted access to ci-role"
+  description = "Terraform remote state S3 bucket name (output of bootstrap) — grants state read and lockfile access to ci-role"
 }

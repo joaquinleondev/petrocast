@@ -1,11 +1,11 @@
 data "terraform_remote_state" "shared" {
   backend = "s3"
   config = {
-    bucket         = var.state_bucket
-    key            = "petrocast/shared/terraform.tfstate"
-    region         = var.aws_region
-    dynamodb_table = var.state_lock_table
-    encrypt        = true
+    bucket       = var.state_bucket
+    key          = "petrocast/shared/terraform.tfstate"
+    region       = var.aws_region
+    use_lockfile = true
+    encrypt      = true
   }
 }
 

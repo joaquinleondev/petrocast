@@ -5,7 +5,7 @@ variable "project" {
 
 variable "aws_region" {
   type    = string
-  default = "us-east-1"
+  default = "us-east-2"
 }
 
 variable "domain" {
@@ -15,7 +15,7 @@ variable "domain" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.small"
+  default = "t3.micro"
 }
 
 variable "traefik_acme_email" {
@@ -26,10 +26,4 @@ variable "traefik_acme_email" {
 variable "state_bucket" {
   type        = string
   description = "S3 bucket name for Terraform remote state (from bootstrap output)"
-}
-
-variable "state_lock_table" {
-  type        = string
-  default     = "petrocast-tf-locks"
-  description = "DynamoDB table name for state locking"
 }

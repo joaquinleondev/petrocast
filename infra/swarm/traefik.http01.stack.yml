@@ -1,18 +1,17 @@
 # Traefik stack for staging and prod — ACME HTTP-01 challenge (per-host cert)
 # Deployed once per EC2 by bootstrap-swarm.sh.
 # ${ACME_EMAIL} and ${AWS_REGION} are substituted by envsubst at deploy time.
-version: "3.9"
 
 services:
   traefik:
-    image: traefik:v2.11
+    image: traefik:v3.6.13
     command:
       - --api.dashboard=false
       - --log.level=INFO
-      - --providers.docker=true
-      - --providers.docker.swarmMode=true
-      - --providers.docker.exposedByDefault=false
-      - --providers.docker.network=traefik-public
+      - --providers.swarm=true
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedByDefault=false
+      - --providers.swarm.network=traefik-public
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
