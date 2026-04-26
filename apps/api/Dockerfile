@@ -28,7 +28,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
-RUN groupadd -g 10001 app && \
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -g 10001 app && \
     useradd -r -u 10001 -g app app
 
 WORKDIR /app
