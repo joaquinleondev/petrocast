@@ -96,8 +96,9 @@ api.petrocast.shop        -> stack prod en EC2 prod
 **Persistencia:**
 
 - Fase 1 no requiere base de datos real.
-- Si Fase 2 introduce PostgreSQL, cada ambiente tendrá su propia base de
-  datos o volumen persistente, nunca compartido entre ambientes.
+- Cuando se incorpore PostgreSQL (stack definido en ADR-0012), cada
+  ambiente tendrá su propia base de datos o volumen persistente, nunca
+  compartido entre ambientes.
 
 ### DNS
 

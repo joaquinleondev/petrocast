@@ -41,7 +41,8 @@ despliegue reproducible, auditable y versionado, necesitamos decidir:
 
 ### Terraform state
 
-- **S3 + DynamoDB lock.**
+- **S3 con locking nativo (`use_lockfile`).**
+- **S3 + DynamoDB lock (legacy, pre-Terraform 1.10).**
 - **S3 sin lock.**
 - **State local commiteado o compartido manualmente.**
 - **Terraform Cloud.**
@@ -61,21 +62,24 @@ despliegue reproducible, auditable y versionado, necesitamos decidir:
 ## Decisión
 
 Adoptamos **Terraform** como herramienta de IaC, con state remoto en
-**S3 + DynamoDB lock**.
+**S3 usando locking nativo del backend** (`use_lockfile = true`,
+disponible desde Terraform 1.10).
 
 ### Estructura
 
 ```text
-infra/
+infra/terraform/
+├── bootstrap/                  # bucket S3 del state (apply único)
 ├── modules/
+│   ├── vpc/
 │   ├── ec2-swarm-node/
 │   ├── ecr/
 │   ├── route53/
-│   ├── s3-state/
 │   ├── s3-artifacts/
 │   ├── iam-github-oidc/
 │   └── cloudwatch/
 └── envs/
+    ├── shared/                 # VPC, ECR, Route53, IAM OIDC, S3, CloudWatch
     ├── preview/
     ├── staging/
     └── prod/
@@ -83,6 +87,9 @@ infra/
 
 Cada environment root usa los módulos compartidos y define sus diferencias:
 
+- `shared`: recursos cross-env (VPC, ECR, Route53 hosted zone, IAM OIDC,
+  S3 de artefactos, CloudWatch log groups). Apply único previo a los
+  envs específicos.
 - `preview`: EC2 para previews efímeros por PR y wildcard
   `*.dev.petrocast.shop`.
 - `staging`: EC2 persistente para `staging.petrocast.shop`.
@@ -96,7 +103,9 @@ El state vive en S3:
 s3://<bucket-terraform-state>/petrocast/<env>/terraform.tfstate
 ```
 
-La tabla DynamoDB provee locking para evitar `apply` concurrentes.
+El locking lo provee el propio backend S3 mediante archivos `.tflock` en
+el bucket (`use_lockfile = true`, GA desde Terraform 1.10). Esto evita
+`apply` concurrentes sin recursos auxiliares.
 
 El bucket de state tiene:
 
@@ -104,9 +113,8 @@ El bucket de state tiene:
 - Encriptación server-side.
 - Bloqueo de acceso público.
 
-El bucket y la tabla se bootstrappean una vez desde
-`infra/modules/s3-state/` o un root bootstrap mínimo. Luego el resto de la
-infra usa backend remoto.
+El bucket se bootstrappea una vez desde `infra/terraform/bootstrap/`.
+Luego el resto de la infra usa backend remoto.
 
 ### Recursos gestionados
 
@@ -193,7 +201,7 @@ Terraform crea el proveedor OIDC de GitHub y roles con permisos mínimos:
 **Negativas / trade-offs asumidos:**
 
 - Terraform suma curva de aprendizaje.
-- El bootstrap de S3/DynamoDB requiere un paso inicial.
+- El bootstrap del bucket S3 de state requiere un paso inicial.
 - Tres EC2 elevan costo frente a una única instancia.
 - Gestionar tres root modules exige disciplina para no duplicar lógica.
 
@@ -233,13 +241,20 @@ Terraform crea el proveedor OIDC de GitHub y roles con permisos mínimos:
 - ❌ Más abstracción y curva para el TP.
 - ❌ CDK acopla fuerte a CloudFormation.
 
-### S3 + DynamoDB para state (elegida)
+### S3 con locking nativo (elegida)
 
-- ✅ Patrón estándar en AWS.
-- ✅ Barato.
-- ✅ Locking real.
+- ✅ Locking real sin recursos extra (Terraform >= 1.10).
+- ✅ Bootstrap mínimo: solo el bucket.
 - ✅ Versionado del state.
-- ❌ Bootstrap inicial.
+- ✅ Sin tabla DynamoDB ni costos adicionales.
+- ❌ Requiere Terraform >= 1.10.
+
+### S3 + DynamoDB lock (legacy)
+
+- ✅ Patrón estándar pre-Terraform 1.10.
+- ❌ Recurso adicional (tabla DynamoDB) sin valor agregado vs locking nativo.
+- ❌ Bootstrap más complejo.
+- ❌ Costo de tabla DynamoDB (mínimo, pero innecesario).
 
 ### State local
 
@@ -272,7 +287,7 @@ Terraform crea el proveedor OIDC de GitHub y roles con permisos mínimos:
 - ADR-0018 (Secrets en GitHub, no en Terraform).
 - Terraform AWS Provider docs.
 - AWS S3 backend para Terraform.
-- AWS DynamoDB state locking.
+- HashiCorp — S3 backend `use_lockfile` (Terraform 1.10).
 - AWS Route 53 wildcard records.
 - GitHub Actions OIDC with AWS.
 - AWS Systems Manager Run Command.
