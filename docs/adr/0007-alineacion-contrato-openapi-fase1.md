@@ -62,10 +62,11 @@ Fase 2 introduce `camelCase` para algún cliente legacy o si aparece una
 versión `v2` del API) el cambio sea **una sola línea** en la clase base y no
 un refactor en N modelos.
 
-Internamente, los modelos de dominio (dataclasses o Pydantic sin alias) viven
-en `packages/core/` y los modelos de API en `apps/api/src/schemas/`. El router
-de FastAPI acepta y devuelve **schemas**, y el servicio traduce a **dominio**
-solo cuando hay lógica de negocio que lo justifique.
+Internamente, los modelos de dominio (dataclasses o Pydantic sin alias)
+viven en `apps/api/src/domain/` (incorporado en Fase 3 según ADR-0020) y
+los modelos de API en `apps/api/src/schemas/`. El router de FastAPI
+acepta y devuelve **schemas**, y el servicio traduce a **dominio** solo
+cuando hay lógica de negocio que lo justifique.
 
 Esto se alinea con el ADR-0006, que ya dejaba abierta la excepción
 explícita: "cuando el contrato OpenAPI lo impone, el alias manda".

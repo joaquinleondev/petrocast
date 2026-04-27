@@ -84,12 +84,16 @@ distintos.
 
 ```text
 .github/workflows/
-├── ci.yml
-├── deploy-preview.yml
+├── ci.yml                       # lint + test + build + scan + deploy preview
 ├── deploy-preview-cleanup.yml
 ├── deploy-staging.yml
-└── deploy-production.yml
+├── deploy-production.yml
+└── tf-plan.yml                  # terraform plan en PRs que tocan infra
 ```
+
+El deploy de previews se modela como un job dentro de `ci.yml` (no como
+workflow separado) para encadenar `lint → test → build → scan → deploy`
+con `needs:` y compartir el digest de la imagen sin re-build.
 
 ### Workflow `ci.yml`
 
@@ -100,29 +104,32 @@ Jobs:
 1. **Static analysis:** `pre-commit run --all-files`, Ruff, mypy,
    markdownlint y yamllint.
 2. **Tests:** unit, integration y contract tests con coverage mínimo.
-3. **Build:** construir imagen Docker.
+3. **Build:** construir imagen Docker y publicar en ECR con tag
+   `mock-api:sha-<sha>` y, en PRs, alias `pr-<N>-sha-<sha>`.
 4. **Security scan:** escaneo de vulnerabilidades de la imagen.
 5. **Artifacts:** subir reportes de tests, coverage y scan a S3
    (`test-reports` / `pipeline-artifacts`) cuando aplique.
+6. **Deploy preview** (solo en PRs, depende de los jobs anteriores):
+   `docker stack deploy pr-<N>` vía SSM Run Command sobre la EC2 de
+   preview, smoke tests contra `pr-<N>.dev.<dominio>` y comentario en
+   el PR con la URL y el resultado.
 
-En PRs, si CI pasa, el workflow de preview puede publicar la imagen en ECR y
-desplegar el stack efímero.
+### Workflow `tf-plan.yml`
 
-### Workflow `deploy-preview.yml`
-
-Disparador: `pull_request` opened, synchronize, reopened.
+Disparador: `pull_request` que toque `infra/terraform/**`.
 
 Flujo:
 
 ```text
-1. Ejecutar CI.
-2. Construir imagen mock-api:sha-<sha> y alias pr-<N>-<sha>.
-3. Publicar imagen en ECR.
-4. Ejecutar docker stack deploy pr-<N> en EC2 swarm-preview-dev.
-5. Traefik enruta pr-<N>.dev.<dominio> al servicio del PR.
-6. Ejecutar smoke tests contra la URL del preview.
-7. Comentar en el PR con la URL y resultado del health check.
+1. Asumir rol IAM vía OIDC.
+2. terraform init con backend S3 (use_lockfile).
+3. terraform validate.
+4. terraform plan en matriz por env (shared, preview, staging, prod).
+5. Publicar el plan como comentario en el PR por env.
 ```
+
+El `apply` no se automatiza desde el workflow: queda manual contra cada
+env (`make apply-<env>`) tras review del plan.
 
 ### Workflow `deploy-preview-cleanup.yml`
 
