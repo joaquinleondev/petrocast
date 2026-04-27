@@ -1,0 +1,57 @@
+# Traefik stack for preview/dev — ACME DNS-01 challenge with Route 53.
+# Uses DNS-01 so PR preview hosts under *.dev.petrocast.shop can get certificates.
+# EC2 instance profile must have Route 53 DNS-01 permissions on the hosted zone.
+# ${ACME_EMAIL}, ${AWS_REGION}, and ${AWS_HOSTED_ZONE_ID} are substituted by envsubst at deploy time.
+
+services:
+  traefik:
+    image: traefik:v3.6.13
+    command:
+      - --api.dashboard=false
+      - --log.level=INFO
+      - --providers.swarm=true
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedByDefault=false
+      - --providers.swarm.network=traefik-public
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --certificatesresolvers.le.acme.dnschallenge.provider=route53
+      - --certificatesresolvers.le.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      - --certificatesresolvers.le.acme.dnschallenge.delayBeforeCheck=0
+    environment:
+      - AWS_REGION=${AWS_REGION}
+      - AWS_HOSTED_ZONE_ID=${AWS_HOSTED_ZONE_ID}
+      - AWS_SDK_LOAD_CONFIG=1
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+      - target: 443
+        published: 443
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/acme
+    networks:
+      - traefik-public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        order: start-first
+      labels:
+        - "traefik.enable=false"
+
+networks:
+  traefik-public:
+    external: true
+
+volumes:
+  acme:
+    driver: local

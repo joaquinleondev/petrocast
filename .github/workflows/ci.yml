@@ -11,8 +11,8 @@ jobs:
     name: static analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install pre-commit
@@ -27,11 +27,298 @@ jobs:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
       - name: Install deps
         run: uv sync --frozen
       - name: Run tests with coverage
-        run: uv run pytest
+        run: uv run pytest --cov --cov-report=xml:coverage.xml
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: apps/api/coverage.xml
+
+  build:
+    name: build & scan
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      ECR_REPOSITORY: petrocast/mock-api
+    outputs:
+      image_uri: ${{ steps.image.outputs.uri }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute short SHA
+        id: sha
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "short=${SOURCE_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.CI_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image URI
+        id: image
+        run: |
+          echo "uri=${ECR_REGISTRY}/${ECR_REPOSITORY}:sha-${{ steps.sha.outputs.short }}" >> "$GITHUB_OUTPUT"
+          echo "local=petrocast-mock-api:sha-${{ steps.sha.outputs.short }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (local)
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          push: false
+          load: true
+          pull: true
+          tags: |
+            ${{ steps.image.outputs.local }}
+            ${{ steps.image.outputs.uri }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Push PR alias tag (preview, pre-scan)
+        if: github.event_name == 'pull_request'
+        run: |
+          PR_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:pr-${{ github.event.number }}-sha-${{ steps.sha.outputs.short }}"
+          docker tag "${{ steps.image.outputs.uri }}" "$PR_TAG"
+          docker push "$PR_TAG"
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: ${{ steps.image.outputs.local }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+
+      - name: Push canonical tag (sha-<short>)
+        run: docker push "${{ steps.image.outputs.uri }}"
+
+      - name: Push staging-latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          STAGING_TAG="${ECR_REGISTRY}/${ECR_REPOSITORY}:staging-latest"
+          docker tag "${{ steps.image.outputs.uri }}" "$STAGING_TAG"
+          docker push "$STAGING_TAG"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+
+  deploy-preview:
+    name: deploy PR preview
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: preview
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: true
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute short SHA
+        id: sha
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: echo "short=${SOURCE_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy via SSM
+        id: ssm
+        env:
+          PR_NUM: ${{ github.event.number }}
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          API_KEY: ${{ secrets.API_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          cat > /tmp/deploy-cmd.sh << EOF
+          export IMAGE_URI="${ECR_REGISTRY}/petrocast/mock-api:pr-${PR_NUM}-sha-${SHORT_SHA}"
+          export STACK_NAME="pr-${PR_NUM}"
+          export HOSTNAME="pr-${PR_NUM}.dev.${DOMAIN}"
+          export REPLICAS="1"
+          export ENV="preview"
+          export API_KEY="${API_KEY}"
+          export AWS_REGION="${AWS_REGION}"
+          export ECR_REGISTRY="${ECR_REGISTRY}"
+          EOF
+          {
+            echo "cat > /tmp/mock-api.stack.yml << 'STACK_EOF'"
+            cat infra/swarm/mock-api.stack.yml
+            echo "STACK_EOF"
+          } >> /tmp/deploy-cmd.sh
+          cat infra/scripts/deploy.sh >> /tmp/deploy-cmd.sh
+
+          S=$(base64 -w0 /tmp/deploy-cmd.sh); L=${#S}; Q=$(( (L + 3) / 4 ))
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n \
+              --arg c1 "printf '%s' '${S:0:$Q}' > /tmp/run.b64" \
+              --arg c2 "printf '%s' '${S:$Q:$Q}' >> /tmp/run.b64" \
+              --arg c3 "printf '%s' '${S:$((2*Q)):$Q}' >> /tmp/run.b64" \
+              --arg c4 "printf '%s' '${S:$((3*Q))}' >> /tmp/run.b64 && base64 -d /tmp/run.b64 > /tmp/deploy-run.sh && bash /tmp/deploy-run.sh" \
+              '{commands: [$c1,$c2,$c3,$c4]}')" \
+            --cloud-watch-output-config \
+              "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/preview/deploy" \
+            --query "Command.CommandId" \
+            --output text)
+          echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM command
+        env:
+          INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
+          COMMAND_ID: ${{ steps.ssm.outputs.command_id }}
+          MAX_ATTEMPTS: "120"
+          POLL_INTERVAL: "5"
+        run: |
+          dump_invocation() {
+            local label="$1"
+            echo "::group::SSM invocation dump ($label)"
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "{Status:Status,ExitCode:ResponseCode,Stdout:StandardOutputContent,Stderr:StandardErrorContent}" \
+              --output json || true
+            echo "::endgroup::"
+          }
+
+          for i in $(seq 1 "$MAX_ATTEMPTS"); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success) echo "SSM command succeeded"; exit 0 ;;
+              Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
+                echo "::error::SSM command status=$STATUS"
+                dump_invocation "$STATUS"
+                exit 1 ;;
+              *) echo "Waiting... status=$STATUS ($i/$MAX_ATTEMPTS)" ;;
+            esac
+            sleep "$POLL_INTERVAL"
+          done
+          echo "::error::Timed out after $((MAX_ATTEMPTS * POLL_INTERVAL))s"
+          dump_invocation "timeout"
+          exit 1
+
+      - name: Smoke test
+        env:
+          PR_NUM: ${{ github.event.number }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          HOST="pr-${PR_NUM}.dev.${DOMAIN}"
+          PREVIEW_URL="https://${HOST}/health/ready"
+          echo "Resolving $HOST"
+          getent hosts "$HOST" || echo "::warning::getent failed for $HOST"
+          echo "Target URL: $PREVIEW_URL"
+          for attempt in $(seq 1 12); do
+            HTTP_CODE=$(curl -sS --ipv4 -o /dev/null -w '%{http_code}' \
+              --max-time 10 "$PREVIEW_URL" 2>/tmp/curl.err)
+            RC=$?
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              echo "Smoke test passed — $PREVIEW_URL"; exit 0
+            fi
+            echo "Not ready — HTTP=$HTTP_CODE rc=$RC (attempt $attempt/12)"
+            [[ "$attempt" -le 2 ]] && { echo "--- curl stderr ---"; cat /tmp/curl.err; echo "---"; }
+            sleep 10
+          done
+          echo "Smoke test failed after 12 attempts" >&2; exit 1
+
+      - name: Comment on PR (success)
+        if: success()
+        uses: actions/github-script@v9
+        env:
+          PR_NUM: ${{ github.event.number }}
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Preview deployed\n\n**URL:** https://pr-${process.env.PR_NUM}.dev.${process.env.DOMAIN}\n**Image:** \`sha-${process.env.SHORT_SHA}\`\n\n_Automatically torn down when this PR closes._`
+            })
+
+      - name: Comment on PR (failure)
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Preview deploy failed\n\nCheck [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            })
+
+  report:
+    name: upload reports to S3
+    needs: [test, build]
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.CI_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download coverage artifact
+        if: needs.test.result == 'success'
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage
+          path: reports/coverage/
+
+      - name: Download Trivy artifact
+        if: needs.build.result != 'skipped'
+        uses: actions/download-artifact@v7
+        with:
+          name: trivy-sarif
+          path: reports/trivy/
+
+      - name: Upload reports to S3
+        run: |
+          aws s3 cp reports/ "s3://${{ secrets.REPORTS_BUCKET }}/${{ github.run_id }}/" \
+            --recursive --no-progress

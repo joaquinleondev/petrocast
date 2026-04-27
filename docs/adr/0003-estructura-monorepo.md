@@ -75,9 +75,9 @@ predictiva/
   vacías anticipadamente.
 - `packages/` se usa solo si surge código compartido entre dos o más
   apps. En Fase 1 probablemente no existirá.
-- `infra/` contiene todo lo necesario para levantar el entorno de
-  ejecución (docker-compose, configuraciones de Dokploy, scripts de
-  deployment).
+- `infra/` contiene todo lo necesario para levantar el entorno de ejecución:
+  Docker Compose local, stacks Docker Swarm, Terraform, monitoreo y scripts
+  de deployment.
 - `docs/` es parte del entregable, no un extra.
 
 ## Consecuencias

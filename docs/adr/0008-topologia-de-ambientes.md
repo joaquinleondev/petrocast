@@ -1,4 +1,4 @@
-# ADR-0008: Topología de ambientes (dev / staging / producción)
+# ADR-0008: Topología de ambientes con previews efímeros, staging y producción separados
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-04-21
@@ -7,170 +7,193 @@
 
 ## Contexto y problema
 
-La adenda técnica de Fase 1 exige automatizar el despliegue a **tres
-ambientes: desarrollo, staging y producción**. El PRD además exige
-disponibilidad del 99.5% para la API de producción y verificación
-automática de salud post-deployment.
+La adenda técnica de Fase 1 exige automatizar despliegues a ambientes de
+desarrollo, staging y producción. Además, el PRD pide disponibilidad de la
+API, verificación automática de salud post-deployment y una separación clara
+entre código en desarrollo y el servicio que verá el evaluador.
 
-Debemos definir:
+Necesitamos definir:
 
-- Dónde corre cada ambiente físicamente.
-- Qué evento dispara un deploy a cada uno.
+- Qué significa "dev" en un flujo con Pull Requests.
+- Dónde corre físicamente cada ambiente.
+- Qué evento dispara un deploy a cada ambiente.
 - Qué URL identifica a cada ambiente.
-- Qué datos usa cada ambiente.
-- Cómo se relaciona esta topología con la estrategia de branching
-  definida en ADR-0004.
+- Cómo se evita mezclar previews, staging y producción en la misma unidad
+  operativa.
+- Cómo se relaciona esta topología con la estrategia de branching definida
+  en ADR-0004.
 
-Esta decisión es **bloqueante** para escribir cualquier pipeline de
-CI/CD: el pipeline concreto depende de esta topología.
+Esta decisión es bloqueante para CI/CD, DNS, Terraform, registry y estrategia
+de rollback.
 
 ## Drivers de la decisión
 
-- El equipo cuenta con créditos AWS educativos, habilitando uso de EC2.
-- Disponemos de un dominio propio, habilitando URLs limpias por ambiente.
-- Equipo de 3 personas con proyecto de ~3 meses: la infraestructura debe
-  poder administrarse sin operaciones complejas.
-- La URL de producción es el entregable evaluable: debe ser estable y
-  no reflejar código en desarrollo.
-- El trunk-based definido en ADR-0004 se mantiene: una sola branch
-  (`main`) alimenta los despliegues.
-- Se deben poder revisar features en aislamiento antes de mergear
-  (objetivo mencionado en conversación inicial del equipo).
+- El equipo cuenta con créditos AWS educativos, por lo que EC2 es viable.
+- Disponemos de un dominio propio para URLs limpias por ambiente.
+- La URL de producción debe ser estable y no reflejar código en desarrollo.
+- Staging debe representar el estado integrado de `main`.
+- Las Pull Requests deben poder revisarse en un ambiente aislado antes de
+  mergear.
+- Se busca profesionalismo sin introducir Kubernetes, ECS o una plataforma
+  managed con mayor complejidad operativa.
+- La separación de ambientes debe ser defendible: no queremos todos los
+  workloads críticos mezclados en una única EC2.
 
 ## Opciones consideradas
 
 1. **Un solo ambiente de producción**, sin staging ni dev deployados.
-2. **Tres ambientes en una misma instancia EC2**, diferenciados por
-   subdominio y red Docker.
-3. **Tres instancias EC2 distintas**, una por ambiente.
+2. **Tres ambientes en una misma EC2**, diferenciados por subdominio y red
+   Docker.
+3. **Tres EC2 separadas**, una para previews/dev, una para staging y una para
+   producción, cada una con Docker Swarm single-node.
 4. **Servicios AWS managed** (ECS Fargate, App Runner) con tres servicios.
 
 ## Decisión
 
-Adoptamos **Opción 2: tres ambientes en una misma instancia EC2**,
-diferenciados por subdominio y manejados por un reverse proxy.
+Adoptamos **tres EC2 separadas**, cada una operando como un **single-node
+Docker Swarm**:
+
+```text
+PR abierta      -> preview/dev efimero: pr-123.dev.petrocast.shop
+merge a main    -> staging persistente: staging.petrocast.shop
+tag v*          -> produccion: api.petrocast.shop
+```
 
 ### Topología
 
-| Ambiente          | URL                           | Disparador                    | Ciclo de vida                      | Base de datos                           |
-| ----------------- | ----------------------------- | ----------------------------- | ---------------------------------- | --------------------------------------- |
-| **Preview (dev)** | `pr-<N>.dev.<dominio>`        | Apertura o push a un PR       | Efímero (se destruye al cerrar PR) | Efímera por PR                          |
-| **Staging**       | `staging.<dominio>`           | Merge a `main` (automático)   | Permanente                         | Persistente, dataset completo sintético |
-| **Producción**    | `<dominio>` o `app.<dominio>` | Creación de tag `v*` (manual) | Permanente                         | Persistente, dataset completo sintético |
+| Ambiente        | URL                         | Disparador                   | Ciclo de vida                     | Host físico             |
+| --------------- | --------------------------- | ---------------------------- | --------------------------------- | ----------------------- |
+| **Preview/dev** | `pr-<N>.dev.petrocast.shop` | PR opened/synchronize/reopen | Efímero, se destruye al cerrar PR | EC2 `swarm-preview-dev` |
+| **Staging**     | `staging.petrocast.shop`    | Merge a `main`               | Persistente                       | EC2 `swarm-staging`     |
+| **Producción**  | `api.petrocast.shop`        | Tag `v*` con approval manual | Persistente                       | EC2 `swarm-prod`        |
 
-**Infraestructura física:**
+Cada EC2 tiene:
 
-- Una única instancia EC2 (tamaño `t3.small` o `t3.medium` según volumen,
-  ajustable).
-- Docker Engine + Docker Compose como runtime de containers.
-- **Traefik** como reverse proxy con terminación TLS automática
-  (Let's Encrypt) y enrutamiento por subdominio a containers.
-- Una red Docker por ambiente (`predictiva-prod`, `predictiva-staging`,
-  `predictiva-pr-<N>`) para aislamiento lógico.
-- PostgreSQL en contenedor por ambiente (tres containers independientes
-  para los ambientes permanentes, efímero por PR).
+- Docker Engine.
+- Docker Swarm inicializado en modo single-node.
+- Traefik como reverse proxy.
+- Acceso a ECR para descargar imágenes.
+- Logs enviados a CloudWatch.
 
-**DNS:**
+Producción puede escalar a dos nodos Swarm si se busca mayor robustez, pero
+para una mock API académica no es obligatorio. El diseño deja esa evolución
+como cambio incremental, no como rediseño.
 
-- `A` record apuntando el dominio a la IP de la EC2.
-- `CNAME` wildcards (`*.dev.<dominio>`) para preview environments.
+### DNS
+
+Route 53 gestiona los records:
+
+```text
+*.dev.petrocast.shop      -> EC2 preview/dev
+staging.petrocast.shop    -> EC2 staging
+api.petrocast.shop        -> EC2 producción
+```
+
+El wildcard `*.dev.petrocast.shop` permite que cada PR tenga su propio hostname
+sin crear records DNS individuales. Traefik enruta internamente por hostname
+al stack correspondiente.
 
 ### Relación con branching (ADR-0004)
 
-La topología de deployment es **ortogonal** a la de branching. Mantenemos
-una única branch permanente (`main`). Las reglas de promoción son:
+La topología de deployment es ortogonal a la estrategia de branching. Se
+mantiene una única branch permanente (`main`) y las promociones ocurren por
+eventos:
 
-```
-Pull Request abierto      →  Preview env efímero en pr-<N>.dev.<dominio>
-Merge a main              →  Deploy automático a staging.<dominio>
-Tag v* creado en main     →  Deploy manual-confirmado a <dominio>
+```text
+Pull Request abierto      -> preview env efimero pr-<N>.dev.petrocast.shop
+Merge a main              -> deploy automatico a staging.petrocast.shop
+Tag v* creado en main     -> deploy a api.petrocast.shop con approval manual
 ```
 
-El deploy a producción **requiere crear un tag** (`git tag v1.0.0 && git
-push --tags`). Esto previene deploys accidentales a la URL que ve el
-evaluador.
+El deploy a producción requiere crear un tag versionado (`v1.0.0`,
+`v1.0.1`, etc.) y pasar por GitHub Environment `production` con aprobación
+manual. Esto evita que un merge accidental a `main` afecte la URL productiva.
 
 ### Datos por ambiente
 
-- **Preview / Dev:** base de datos efímera, sembrada con un dataset
-  sintético pequeño (~10 pozos, 2 años de histórico) al crearse.
-- **Staging:** base de datos persistente con dataset sintético completo
-  (~50 pozos, 10 años). Puede resetearse manualmente si se corrompe.
-- **Producción:** mismo dataset que staging durante el TP. No hay
-  datos sensibles reales en ninguna fase, por lo que no hay
-  consideraciones adicionales de privacidad o enmascaramiento.
+- **Preview/dev:** estado efímero por PR, sembrado con dataset sintético
+  pequeño. Se elimina al cerrar o mergear el PR.
+- **Staging:** dataset sintético persistente y completo para validar el
+  sistema integrado.
+- **Producción:** dataset sintético persistente usado para la entrega y demo
+  formal.
 
-Cada ambiente tiene **variables de entorno propias** (`.env` cargado
-por el pipeline según ambiente). Nunca se comparten credenciales entre
-ambientes.
+No hay datos reales sensibles en Fase 1. Si en Fase 2 se incorporaran datos
+reales, se deberá agregar un ADR específico sobre segregación, backups,
+retención y enmascaramiento.
 
 ## Consecuencias
 
 **Positivas:**
 
-- Tres ambientes reales con URLs limpias y estables.
-- Producción protegida de cambios accidentales (requiere tag).
-- Staging captura regresiones antes de producción.
-- Preview environments permiten review visual de cada PR.
-- Una sola EC2 simplifica administración y reduce costo de créditos.
-- Trunk-based se mantiene sin contradicciones.
+- Dev queda representado por previews efímeros reales, no por una branch
+  permanente.
+- Staging y producción quedan físicamente separados, lo que reduce el riesgo
+  de interferencia entre workloads.
+- La URL productiva solo cambia ante releases explícitos.
+- La separación por EC2 es simple de explicar y operar, pero más defendible
+  que una sola máquina con todo mezclado.
+- Docker Swarm permite rolling updates y rollback sin Kubernetes.
+- El wildcard DNS simplifica previews por PR.
 
 **Negativas / trade-offs asumidos:**
 
-- Los tres ambientes comparten hardware. Si la EC2 cae, caen los tres.
-  Aceptable para un TP; en producción real se usaría multi-AZ.
-- El aislamiento es lógico (redes Docker) y no físico. Un container que
-  consume todos los recursos puede afectar a los otros. Mitigable con
-  `docker run --memory --cpus` por ambiente.
-- Los preview environments consumen recursos mientras el PR esté abierto.
-  Si hay muchos PRs simultáneos en EC2 pequeña, puede saturarse.
-  Mitigado con `t3.small` holgada y reglas de cleanup automático.
+- Tres EC2 cuestan más que una única instancia.
+- Hay tres hosts que parchear, monitorear y provisionar.
+- El aislamiento sigue sin ser alta disponibilidad real: cada ambiente tiene
+  un único nodo. Para el TP es aceptable.
+- Docker Swarm single-node no resuelve fallas físicas del host; solo gestiona
+  el ciclo de vida de servicios dentro del nodo.
 
 **Neutras:**
 
-- La elección de una sola EC2 es reversible: si el proyecto crece, se
-  migran staging y prod a instancias separadas sin cambiar la lógica de
-  deployment.
+- La decisión es reversible: si el proyecto crece, staging y producción
+  pueden migrarse a Swarm multi-node, ECS o Kubernetes sin cambiar el flujo
+  de promoción PR -> staging -> prod.
 
 ## Pros y contras de cada opción
 
 ### Opción 1 — Un solo ambiente de producción
 
 - ✅ Infraestructura mínima.
-- ❌ No cumple requisito explícito de la adenda (tres ambientes).
-- ❌ Sin staging, los bugs llegan al evaluador.
-- ❌ Sin dev, no hay forma de probar features antes de mergear.
+- ❌ No cumple bien el requisito de separar ambientes.
+- ❌ Sin staging, los bugs llegan directamente al evaluador.
+- ❌ Sin previews, no hay forma de probar PRs en aislamiento.
 
-### Opción 2 — Tres ambientes en una misma EC2 (elegida)
+### Opción 2 — Tres ambientes en una misma EC2
 
-- ✅ Cumple el requisito de tres ambientes.
-- ✅ Una sola instancia que administrar.
-- ✅ Usa créditos AWS eficientemente.
-- ✅ Compatible con preview environments por PR.
-- ❌ Aislamiento lógico, no físico.
+- ✅ Bajo costo.
+- ✅ Un solo host que administrar.
+- ❌ Mezcla workloads de distinta criticidad.
+- ❌ Una caída de la EC2 tira previews, staging y producción.
+- ❌ Menos defendible como separación real de environments.
 
-### Opción 3 — Tres EC2 distintas
+### Opción 3 — Tres EC2 con Swarm single-node (elegida)
 
-- ✅ Aislamiento físico total.
-- ❌ Triplica costos (tres instancias corriendo siempre).
-- ❌ Mayor complejidad de configuración (tres hosts, tres Traefik, etc.).
-- ❌ Sobredimensionado para el propósito del TP.
+- ✅ Separación física por ambiente.
+- ✅ Cumple previews, staging y producción sin sobreingeniería.
+- ✅ Permite rolling updates y rollback vía Docker Swarm.
+- ✅ Mantiene bajo overhead operativo frente a Kubernetes o ECS.
+- ❌ Mayor costo que una EC2 única.
+- ❌ No ofrece HA multi-nodo por default.
 
 ### Opción 4 — ECS Fargate / App Runner
 
-- ✅ Managed: menos ops.
-- ✅ Escalado automático.
-- ❌ Más caro por hora que EC2.
-- ❌ Oculta conceptos de Docker, networking y deployment que la
-  materia explícitamente cubre. El TP gana valor pedagógico con EC2.
-- ❌ Curva de aprendizaje de servicios AWS específicos.
+- ✅ Managed: menos administración de servidores.
+- ✅ Escalado y health management nativos.
+- ❌ Mayor curva de aprendizaje para el equipo.
+- ❌ Más difícil de explicar en detalle si el foco del TP es demostrar
+  fundamentos de Docker, networking y despliegue.
+- ❌ Potencialmente más caro para tres ambientes.
 
 ## Referencias
 
-- ADR-0004 (Estrategia de branching) — trunk-based compatible.
-- ADR-0009 (Estrategia de deployment) — define cómo se promueve entre
-  ambientes.
-- ADR-0010 (Plataforma de hosting) — justifica EC2 + Docker.
-- ADR-0011 (Plataforma de CI/CD) — implementa los disparadores de deploy.
-- [The Twelve-Factor App — Dev/prod parity](https://12factor.net/dev-prod-parity)
-- Adenda técnica de Fase 1 (requisito de tres ambientes).
+- ADR-0004 (Estrategia de branching).
+- ADR-0009 (Estrategia de deployment, rolling updates y rollback).
+- ADR-0010 (Plataforma de hosting).
+- ADR-0011 (Plataforma de CI/CD).
+- ADR-0013 (Container registry en ECR).
+- ADR-0019 (Infraestructura como código con Terraform).
+- AWS Route 53 — wildcards en records DNS.
+- GitHub Actions — environments y deployment protection rules.
+- Adenda técnica de Fase 1 (requisito de ambientes y CI/CD).

@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (gitignored) and fill in your values.
+state_bucket       = "petrocast-tf-state-XXXXXXXX"
+traefik_acme_email = "your@email.com"

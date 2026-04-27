@@ -108,8 +108,8 @@ borra. No existen branches de integración permanentes.
 
 La estrategia de branching definida en este ADR es **ortogonal** a la
 topología de deployment. Una sola branch (`main`) alimenta múltiples
-ambientes (dev, staging, producción) mediante distintos disparadores
-automatizados. La topología concreta se formaliza en el ADR-0007.
+ambientes (preview/dev, staging, producción) mediante distintos disparadores
+automatizados. La topología concreta se formaliza en el ADR-0008.
 
 El resumen:
 
@@ -130,8 +130,9 @@ El resumen:
 **Negativas / trade-offs asumidos:**
 
 - Requiere disciplina para no dejar crecer branches.
-- No hay un entorno "staging" permanente; para probar integración se
-  usan preview environments o integration branches efímeras.
+- No existe una branch `develop` permanente. La integración se valida con
+  preview environments por PR y con staging persistente después del merge a
+  `main`.
 
 **Neutras:**
 

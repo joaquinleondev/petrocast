@@ -1,0 +1,6 @@
+# Copy this file to backend.config and fill in values from: make bootstrap
+# backend.config is gitignored — never commit it.
+bucket         = "petrocast-tf-state-XXXXXXXX"
+region         = "us-east-1"
+use_lockfile   = true
+encrypt        = true

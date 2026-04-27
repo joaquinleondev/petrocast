@@ -50,3 +50,16 @@ docker compose -f infra/compose.observability.yml up
 
 - Grafana: <http://localhost:3000> (sin login, dashboard cargado automáticamente)
 - Prometheus: <http://localhost:9090>
+
+## Despliegue
+
+El pipeline CI/CD es completamente automatizado vía GitHub Actions:
+
+| Evento | Resultado |
+|--------|-----------|
+| PR abierta/actualizada | Build + Trivy scan + preview efímero en `pr-<N>.dev.petrocast.shop` |
+| Merge a `main` | Rollout a staging (`staging.petrocast.shop`) con rollback automático |
+| Tag `v*` | Despliegue a producción (`api.petrocast.shop`) con approval requerido |
+| PR cerrada | Teardown automático del preview + limpieza ECR |
+
+Ver [infra/README.md](infra/README.md) para el diagrama de flujo completo y [infra/terraform/README.md](infra/terraform/README.md) para la secuencia de provisioning de la infraestructura AWS.

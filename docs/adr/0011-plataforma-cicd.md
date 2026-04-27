@@ -1,4 +1,4 @@
-# ADR-0011: Plataforma de CI/CD con GitHub Actions
+# ADR-0011: Plataforma de CI/CD con GitHub Actions, OIDC y despliegue a Docker Swarm
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-04-21
@@ -12,219 +12,273 @@ La adenda técnica de Fase 1 exige un pipeline de CI/CD automatizado que:
 - Ejecute tests automáticamente en cada PR.
 - Haga análisis estático de código.
 - Genere imágenes Docker inmutables.
-- Deploye automáticamente a los ambientes definidos.
+- Publique las imágenes en un registry privado.
+- Deploye a previews/dev, staging y producción.
 - Verifique salud post-deploy.
-- Soporte recuperación automática ante fallos.
+- Soporte rollback automático ante fallos.
 
-El código vive en GitHub (ADR-0003). La infraestructura es EC2
-(ADR-0009). Los ambientes están definidos (ADR-0007) y la estrategia
-de deploy también (ADR-0008).
-
-Debemos decidir la plataforma que **orquesta** todo esto.
+El código vive en GitHub (ADR-0003), los ambientes corren en EC2 con Docker
+Swarm (ADR-0008 y ADR-0010), las imágenes se guardan en ECR (ADR-0013) y el
+rollout usa Swarm (ADR-0009). Debemos decidir quién orquesta ese flujo y cómo
+se autentica contra AWS.
 
 ## Drivers de la decisión
 
-- Integración nativa con el repositorio (preferencia por plataformas
-  que vivan en GitHub).
-- Capacidad de ejecutar acciones sobre la infraestructura remota (SSH a
-  EC2, push a container registry).
-- Soporte para secrets (API keys, SSH keys) sin exponerlos en código.
-- Ecosistema de acciones reutilizables.
-- Gratis o bajo costo para el volumen del TP.
+- Integración nativa con Pull Requests, pushes y tags de GitHub.
+- Autenticación contra AWS sin access keys permanentes.
+- Capacidad de publicar imágenes en ECR.
+- Capacidad de ejecutar despliegues remotos sobre EC2/Swarm.
+- Soporte de secrets y reglas por ambiente.
+- Bajo costo para el volumen del TP.
+- Evidencia clara del proceso en logs de pipeline.
 
 ## Opciones consideradas
 
-1. **GitHub Actions** (nativo del repo).
+1. **GitHub Actions + OIDC hacia AWS.**
 2. **GitLab CI** (requiere migrar el repo).
-3. **CircleCI / Travis / Drone** (terceros externos).
-4. **Jenkins** self-hosted.
-5. **AWS CodePipeline / CodeBuild** (nativo de AWS).
+3. **CircleCI / Travis / Drone**.
+4. **Jenkins self-hosted.**
+5. **AWS CodePipeline / CodeBuild.**
 
 ## Decisión
 
-Adoptamos **GitHub Actions** como plataforma de CI/CD.
+Adoptamos **GitHub Actions** como plataforma de CI/CD, autenticada contra AWS
+mediante **OIDC** y roles IAM de corta duración.
+
+No guardamos access keys permanentes de AWS como secrets. GitHub Actions
+asume un rol IAM autorizado para:
+
+- Publicar y leer imágenes en ECR.
+- Subir artefactos a S3.
+- Ejecutar despliegues remotos vía AWS Systems Manager Run Command, o SSH
+  restringido como fallback inicial.
+- Leer/escribir información mínima necesaria para Terraform según el workflow.
+
+### Principio de imágenes
+
+Adoptamos el patrón:
+
+```text
+build once -> promote same artifact
+```
+
+Para cada commit deployable se construye una imagen canónica:
+
+```text
+mock-api:sha-<sha_corto>
+```
+
+Los tags por ambiente son alias útiles, no builds distintos:
+
+```text
+PR:      mock-api:pr-123-<sha_corto>
+main:    mock-api:sha-<sha_corto>, mock-api:staging-latest
+release: mock-api:v1.0.0
+```
+
+Producción toma el digest ya validado en staging y lo etiqueta como `v*`.
+Esto evita que "lo que se probó" y "lo que se deployó" sean artefactos
+distintos.
 
 ### Estructura de workflows
 
-```
+```text
 .github/workflows/
-├── ci.yml                    # Tests, lint, build — en cada PR
-├── deploy-preview.yml        # Deploy a preview env — en PR opened/updated
-├── deploy-preview-cleanup.yml # Destruye preview env — en PR closed
-├── deploy-staging.yml        # Deploy a staging — en merge a main
-└── deploy-production.yml     # Deploy a producción — en tag v*
+├── ci.yml
+├── deploy-preview.yml
+├── deploy-preview-cleanup.yml
+├── deploy-staging.yml
+└── deploy-production.yml
 ```
 
-### Workflow `ci.yml` (se ejecuta en cada PR)
+### Workflow `ci.yml`
 
-**Jobs (en paralelo donde sea posible):**
+Disparador: `pull_request` y `push` a `main`.
 
-1. **Lint** — Ejecuta los linters definidos en ADR-0006
-   (ruff, eslint, prettier, markdownlint). Falla el PR si hay errores.
-2. **Type-check** — `mypy` para Python, `tsc --noEmit` para TypeScript.
-3. **Unit tests** — Ejecuta tests unitarios en cada servicio.
-4. **Integration tests** — Levanta stack mínimo con `docker compose` y
-   corre tests de integración contra la API.
-5. **Build images** — Construye imágenes Docker para cada servicio.
-   Las etiqueta con el SHA del commit y las sube al container registry
-   (ghcr.io, definido en ADR propio pendiente).
-6. **Vulnerability scan** — Corre Trivy contra las imágenes
-   construidas. Advierte sobre CVEs críticas sin fallar por default
-   (configurable).
-7. **OpenAPI contract validation** — Valida que los endpoints
-   implementados cumplan la spec OpenAPI de la adenda.
+Jobs:
 
-Todos los jobs deben pasar para poder mergear (branch protection
-rule de ADR-0004).
+1. **Static analysis:** `pre-commit run --all-files`, Ruff, mypy,
+   markdownlint y yamllint.
+2. **Tests:** unit, integration y contract tests con coverage mínimo.
+3. **Build:** construir imagen Docker.
+4. **Security scan:** escaneo de vulnerabilidades de la imagen.
+5. **Artifacts:** subir reportes de tests, coverage y scan a S3
+   (`test-reports` / `pipeline-artifacts`) cuando aplique.
+
+En PRs, si CI pasa, el workflow de preview puede publicar la imagen en ECR y
+desplegar el stack efímero.
 
 ### Workflow `deploy-preview.yml`
 
-Disparador: `pull_request` (opened, synchronize, reopened).
+Disparador: `pull_request` opened, synchronize, reopened.
 
-**Pasos:**
+Flujo:
 
-1. Construye o descarga las imágenes del PR (tag = SHA del commit).
-2. SSH a la EC2 usando una clave guardada en GitHub Secrets.
-3. Ejecuta `docker compose -f compose.preview.yml --project-name pr-<N> up -d`
-   en la EC2, con variables de entorno específicas del PR.
-4. Configura el subdominio `pr-<N>.dev.<dominio>` vía labels de Traefik.
-5. Espera a que `/health/ready` responda OK.
-6. Comenta en el PR con la URL del preview y un summary de health.
+```text
+1. Ejecutar CI.
+2. Construir imagen mock-api:sha-<sha> y alias pr-<N>-<sha>.
+3. Publicar imagen en ECR.
+4. Ejecutar docker stack deploy pr-<N> en EC2 swarm-preview-dev.
+5. Traefik enruta pr-<N>.dev.<dominio> al servicio del PR.
+6. Ejecutar smoke tests contra la URL del preview.
+7. Comentar en el PR con la URL y resultado del health check.
+```
 
 ### Workflow `deploy-preview-cleanup.yml`
 
 Disparador: `pull_request` closed.
 
-**Pasos:**
+Flujo:
 
-1. SSH a la EC2.
-2. Ejecuta `docker compose --project-name pr-<N> down -v` (elimina
-   containers y volúmenes del PR).
-3. Comenta en el PR confirmando el teardown.
+```text
+1. Ejecutar docker stack rm pr-<N> en EC2 swarm-preview-dev.
+2. Eliminar recursos efímeros asociados al PR si existen.
+3. Comentar en el PR confirmando el teardown.
+```
 
 ### Workflow `deploy-staging.yml`
 
 Disparador: `push` a `main`.
 
-**Pasos:**
+Flujo:
 
-1. Construye imágenes con tag `staging-<SHA>` y `staging-latest`.
-2. SSH a la EC2.
-3. `docker compose pull` + `docker compose up -d` sobre el stack de
-   staging, aplicando **rolling update** con `--no-stop-on-error`.
-4. Espera `/health/ready` en ambas réplicas.
-5. Consulta `/health` y verifica que la versión sea la esperada.
-6. **Si algún check falla**, ejecuta rollback:
-   - `docker compose` con el tag de la versión previa.
-   - Verifica que la versión previa vuelva a estar healthy.
-   - Marca el job como fallido.
-7. Notifica al equipo.
+```text
+1. Ejecutar CI sobre el commit de main.
+2. Construir/publicar mock-api:sha-<sha>.
+3. Actualizar alias staging-latest al mismo digest.
+4. Ejecutar docker stack deploy staging en EC2 swarm-staging.
+5. Esperar rolling update de Swarm.
+6. Consultar /health/ready.
+7. Ejecutar smoke tests contra staging.<dominio>.
+8. Si falla health o smoke, ejecutar docker service rollback staging_mock-api.
+```
+
+Staging no requiere aprobación manual: debe moverse rápido y representar el
+estado integrado de `main`.
 
 ### Workflow `deploy-production.yml`
 
-Disparador: `push` de un tag que matchea `v*`.
+Disparador: tag `v*` apuntando a un commit alcanzable desde `main`.
 
-**Pasos:**
+Flujo:
 
-1. Verifica que el tag apunta a un commit en `main` (evita tags en
-   branches sueltas).
-2. Requiere aprobación manual de un segundo miembro del equipo
-   (GitHub Environments con protection rules). Esto sustituye al
-   "botón de promote".
-3. Mismo flujo que staging, pero apuntando al stack de producción.
-4. Health checks más estrictos: si algo falla, rollback automático
-   inmediato.
-5. Notificación al equipo con la URL de producción confirmando el
-   deploy.
+```text
+1. Verificar que el tag apunta a main.
+2. Resolver el digest mock-api:sha-<sha> ya construido.
+3. Etiquetar ese digest como mock-api:v<semver>.
+4. Requerir aprobación manual vía GitHub Environment production.
+5. Ejecutar docker stack deploy prod en EC2 swarm-prod.
+6. Esperar rolling update de Swarm.
+7. Ejecutar smoke tests contra api.<dominio>.
+8. Si falla, ejecutar docker service rollback prod_mock-api.
+```
+
+Producción usa GitHub Environment `production` con required reviewers y
+secrets propios.
+
+### Despliegue remoto
+
+Opción preferida:
+
+- **AWS Systems Manager Run Command** para ejecutar comandos en EC2 sin abrir
+  SSH público.
+
+Fallback aceptado para primera iteración:
+
+- SSH restringido desde GitHub Actions al usuario de deploy.
+- Security Group limitado.
+- Clave guardada como GitHub Secret hasta migrar a SSM.
+
+El ADR favorece SSM como estado objetivo por seguridad, pero permite SSH si
+el tiempo de Fase 1 exige reducir setup inicial.
 
 ### Gestión de secrets
 
-**Almacenados en GitHub Secrets, no en el repo:**
+**GitHub Environments:**
 
-- `EC2_SSH_PRIVATE_KEY` — clave SSH para el usuario de deploy.
-- `EC2_HOST` — DNS o IP de la instancia.
-- `CONTAINER_REGISTRY_TOKEN` — si se usa registry con auth.
-- `API_KEY_PROD`, `API_KEY_STAGING` — API keys de la aplicación
-  (aunque para Fase 1 sea `abcdef12345`, se mantiene en secret para
-  prácticas correctas).
-- `DATABASE_URL_PROD`, `DATABASE_URL_STAGING`.
+- `preview`
+- `staging`
+- `production`
 
-**Environments de GitHub:**
+Secrets por ambiente:
 
-Configuramos tres environments (`preview`, `staging`, `production`)
-con sus propias variables y reglas:
+- `API_KEY`.
+- Variables de smoke tests.
+- Parámetros de despliegue no sensibles.
 
-- `production` requiere approval de un segundo miembro para deploy.
-- `staging` y `preview` deployan sin approval.
+Credenciales AWS:
+
+- No se guardan access keys permanentes.
+- GitHub Actions usa OIDC para asumir roles IAM con permisos mínimos.
 
 ## Consecuencias
 
 **Positivas:**
 
-- Integración cero-fricción con el repo (push, PR events, tags).
-- Ecosistema amplio de actions (docker/build-push-action, ssh-action,
-  etc.) que cubren 90% del trabajo sin escribir shell.
-- Secrets management integrado.
-- Environments de GitHub dan "approval gates" sin necesidad de
-  herramientas adicionales.
-- Gratuito para repos públicos; límite generoso para privados.
-- Logs de cada run quedan visibles en la UI de GitHub para auditoría.
+- Integración directa con PRs, `main` y tags.
+- OIDC elimina credenciales AWS long-lived.
+- GitHub Environments dan approvals y secrets por ambiente.
+- Los previews se crean y destruyen automáticamente.
+- Staging y producción usan el mismo artefacto validado.
+- Rollback queda cubierto por Swarm y por smoke tests del pipeline.
 
 **Negativas / trade-offs asumidos:**
 
-- GitHub Actions como vendor lock-in suave. Migración a otra plataforma
-  requiere reescribir workflows. Mitigable: los pasos internos son
-  comandos de shell reusables.
-- Los jobs corren en runners efímeros de GitHub: cold start en cada
-  corrida. Para el volumen del TP, irrelevante.
-- SSH desde GitHub Actions a EC2 expone la clave si no se gestiona
-  correctamente. Mitigado con GitHub Secrets y un usuario SSH
-  dedicado con permisos mínimos.
+- OIDC + IAM requiere configuración inicial más cuidadosa.
+- SSM Run Command agrega permisos y setup de agente; SSH puede ser necesario
+  como primer paso.
+- Build once requiere disciplina: no reconstruir silenciosamente en
+  producción.
+- Los workflows son más largos que un deploy simple por SSH.
 
 **Neutras:**
 
-- Para Fase 1 no usamos self-hosted runners. Se evalúa en Fase 2+ si
-  hay workloads pesadas (ej: entrenar modelos).
+- Si en Fase 2 se adopta ECS/Kubernetes, GitHub Actions y OIDC siguen
+  vigentes; cambiaría el job de deploy, no el modelo completo.
 
 ## Pros y contras de cada opción
 
-### GitHub Actions (elegida)
+### GitHub Actions + OIDC (elegida)
 
 - ✅ Nativo del repo.
-- ✅ Gratis para el volumen del TP.
-- ✅ Environments con approval gates.
-- ❌ Vendor lock-in suave.
+- ✅ Sin credenciales AWS permanentes.
+- ✅ Environments con approvals y secrets.
+- ✅ Buen ecosistema para Docker, ECR, S3 y AWS.
+- ❌ Vendor lock-in suave con GitHub.
 
 ### GitLab CI
 
-- ✅ Excelente CI/CD, muy maduro.
-- ❌ Requiere migrar el repo a GitLab.
+- ✅ CI/CD maduro.
+- ❌ Requiere migrar el repo o duplicar integración.
 
-### CircleCI / Travis
+### CircleCI / Travis / Drone
 
-- ✅ Independiente del hosting del repo.
-- ❌ Requiere cuenta separada, configuración de webhooks.
-- ❌ Ecosistema menor que GitHub Actions.
+- ✅ Plataformas conocidas.
+- ❌ Cuenta y configuración adicional.
+- ❌ Menor integración con PRs y environments de GitHub.
 
-### Jenkins self-hosted
+### Jenkins
 
 - ✅ Control total.
-- ❌ Overhead operativo enorme para un TP.
-- ❌ Es la plataforma menos querida por los desarrolladores.
+- ❌ Overhead operativo desproporcionado para el TP.
 
-### AWS CodePipeline
+### AWS CodePipeline / CodeBuild
 
-- ✅ Nativo de AWS, integración profunda con servicios AWS.
-- ❌ DX significativamente peor que GitHub Actions.
-- ❌ Configuración más compleja para casos simples.
+- ✅ Integración profunda con AWS.
+- ❌ Peor experiencia para PRs y reviews.
+- ❌ Más configuración que GitHub Actions para este caso.
 
 ## Referencias
 
-- ADR-0003 (Monorepo — repo en GitHub).
-- ADR-0004 (Branching — PR-centric).
+- ADR-0003 (Monorepo).
+- ADR-0004 (Branching).
 - ADR-0008 (Topología de ambientes).
-- ADR-0009 (Estrategia de deployment).
-- ADR-0010 (Hosting en EC2).
-- [GitHub Actions — Docs](https://docs.github.com/en/actions)
-- [GitHub Environments and deployment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)
-- Adenda técnica de Fase 1 (requisitos citados).
+- ADR-0009 (Rolling updates y rollback).
+- ADR-0010 (Hosting en EC2 con Docker Swarm).
+- ADR-0013 (ECR).
+- ADR-0018 (Gestión de configuración).
+- ADR-0019 (Terraform e IAM OIDC).
+- GitHub Actions — OIDC with AWS.
+- GitHub Actions — Environments.
+- AWS Systems Manager Run Command.
+- Docker Swarm — `docker stack deploy` y `docker service rollback`.

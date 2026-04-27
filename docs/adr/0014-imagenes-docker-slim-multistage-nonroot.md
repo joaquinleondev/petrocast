@@ -68,9 +68,10 @@ Fijamos además:
 
 - `PYTHONDONTWRITEBYTECODE=1` y `PYTHONUNBUFFERED=1`.
 - `PIP_NO_CACHE_DIR=1` y `UV_COMPILE_BYTECODE=1`.
-- `HEALTHCHECK` **no se declara en el Dockerfile**: los health checks viven
-  a nivel de Traefik / docker-compose para que sean consistentes con el
-  contrato de liveness/readiness/deep definido en ADR-0009.
+- `HEALTHCHECK` **no se declara en el Dockerfile**: se declara a nivel de
+  servicio Swarm/Compose para poder ajustar intervalos, timeouts y endpoints
+  por ambiente sin reconstruir la imagen, manteniendo el contrato de
+  liveness/readiness/deep definido en ADR-0009.
 - `.dockerignore` exhaustivo (`.git`, `.venv`, `__pycache__`, `tests`,
   `docs`, `.env*`, `*.md` salvo los que la imagen necesite).
 - Las imágenes se etiquetan con labels OCI estándar (`org.opencontainers.
@@ -99,15 +100,15 @@ image.source`, `revision`, `created`, `version`).
 - Algunas bibliotecas que escriben en `/tmp` o `/app` necesitan permisos
   explícitos si se corre read-only; documentado en el Dockerfile.
 - El UID fijo puede chocar con volúmenes bind-mounteados en desarrollo local
-  si hay diferencias con el UID del host; se mitiga con `docker compose`
-  usando volúmenes nombrados o `userns-remap` cuando aplique.
+  si hay diferencias con el UID del host; se mitiga usando volúmenes
+  nombrados o `userns-remap` cuando aplique.
 
 ### Neutras
 
 - Distroless queda como alternativa futura para producción cuando el stack
   sea 100 % estable.
-- Se evalúa activar el flag `--read-only` en docker-compose de producción en
-  una fase posterior.
+- Se evalúa activar filesystem read-only en los servicios Swarm de producción
+  en una fase posterior.
 
 ## Pros y contras de las opciones
 
@@ -157,7 +158,7 @@ image.source`, `revision`, `created`, `version`).
 #### No-root
 
 - **Pros:** Menor blast radius ante RCE; cumple checklists de hardening;
-  compatible con Traefik/Compose.
+  compatible con Traefik y Docker Swarm.
 - **Contras:** Requiere `chown` y planificar dónde escribe la app.
 
 #### Root
@@ -169,7 +170,7 @@ image.source`, `revision`, `created`, `version`).
 ## Referencias
 
 - ADR-0009 — Rolling updates y health checks.
-- ADR-0010 — AWS EC2 + Docker Compose + Traefik.
+- ADR-0010 — AWS EC2 + Docker Swarm + Traefik.
 - ADR-0012 — Stack backend y uso de `uv`.
 - ADR-0013 — Publicación de imágenes en ECR.
 - Docker docs — multi-stage builds, `.dockerignore`, labels OCI.

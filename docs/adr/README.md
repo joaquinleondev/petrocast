@@ -40,17 +40,17 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0005](./0005-convenciones-commits-prs.md)                | Convenciones de commits y PRs            | Aceptado | 2026-04-20 |
 | [0006](./0006-convenciones-naming.md)                     | Convenciones de naming                   | Aceptado | 2026-04-20 |
 | [0007](./0007-alineacion-contrato-openapi-fase1.md)       | Alineación contrato OpenAPI Fase 1       | Aceptado | 2026-04-21 |
-| [0008](./0008-topologia-de-ambientes.md)                  | Topología de ambientes                   | Aceptado | 2026-04-21 |
-| [0009](./0009-estrategia-deployments.md)                  | Estrategia de deployments y rollback     | Aceptado | 2026-04-21 |
-| [0010](./0010-plataforma-hosting.md)                      | Plataforma de hosting (AWS EC2)          | Aceptado | 2026-04-21 |
-| [0011](./0011-plataforma-cicd.md)                         | Plataforma CI/CD (GitHub Actions)        | Aceptado | 2026-04-21 |
+| [0008](./0008-topologia-de-ambientes.md)                  | Topología previews/staging/producción    | Aceptado | 2026-04-21 |
+| [0009](./0009-estrategia-deployments.md)                  | Deployments Swarm y rollback             | Aceptado | 2026-04-21 |
+| [0010](./0010-plataforma-hosting.md)                      | Hosting AWS EC2 con Docker Swarm         | Aceptado | 2026-04-21 |
+| [0011](./0011-plataforma-cicd.md)                         | CI/CD GitHub Actions con OIDC            | Aceptado | 2026-04-21 |
 | [0012](./0012-stack-backend-python-fastapi-uv.md)         | Stack backend Python/FastAPI/uv          | Aceptado | 2026-04-21 |
-| [0013](./0013-container-registry-aws-ecr.md)              | Container registry AWS ECR               | Aceptado | 2026-04-21 |
+| [0013](./0013-container-registry-aws-ecr.md)              | Registry AWS ECR y promoción de imagen   | Aceptado | 2026-04-21 |
 | [0014](./0014-imagenes-docker-slim-multistage-nonroot.md) | Imágenes Docker slim multi-stage no-root | Aceptado | 2026-04-21 |
 | [0015](./0015-analisis-estatico-ruff-mypy-precommit.md)   | Análisis estático Ruff/mypy/pre-commit   | Aceptado | 2026-04-21 |
 | [0016](./0016-estrategia-testing-pytest-schemathesis.md)  | Estrategia testing pytest/Schemathesis   | Aceptado | 2026-04-21 |
-| [0017](./0017-observabilidad-prometheus-grafana-loki.md)  | Observabilidad Prometheus/Grafana/Loki   | Aceptado | 2026-04-21 |
+| [0017](./0017-observabilidad-cloudwatch-dashboard-local.md) | Observabilidad CloudWatch y dashboard    | Aceptado | 2026-04-21 |
 | [0018](./0018-gestion-configuracion-pydantic-settings.md) | Gestión configuración Pydantic Settings  | Aceptado | 2026-04-21 |
-| [0019](./0019-infraestructura-terraform-aws.md)           | Infraestructura Terraform AWS            | Aceptado | 2026-04-21 |
+| [0019](./0019-infraestructura-terraform-aws.md)           | Terraform AWS por ambiente               | Aceptado | 2026-04-21 |
 | [0020](./0020-estructura-directorios-backend.md)          | Estructura directorios backend           | Aceptado | 2026-04-22 |
 | [0021](./0021-observabilidad-local-fase1.md)              | Observabilidad local Fase 1              | Aceptado | 2026-04-23 |
