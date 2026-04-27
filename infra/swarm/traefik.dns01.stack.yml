@@ -1,7 +1,7 @@
 # Traefik stack for preview/dev — ACME DNS-01 challenge with Route 53.
 # Uses DNS-01 so PR preview hosts under *.dev.petrocast.shop can get certificates.
-# EC2 instance profile must have route53:ChangeResourceRecordSets on the hosted zone.
-# ${ACME_EMAIL} and ${AWS_REGION} are substituted by envsubst at deploy time.
+# EC2 instance profile must have Route 53 DNS-01 permissions on the hosted zone.
+# ${ACME_EMAIL}, ${AWS_REGION}, and ${AWS_HOSTED_ZONE_ID} are substituted by envsubst at deploy time.
 
 services:
   traefik:
@@ -24,6 +24,7 @@ services:
       - --certificatesresolvers.le.acme.dnschallenge.delayBeforeCheck=0
     environment:
       - AWS_REGION=${AWS_REGION}
+      - AWS_HOSTED_ZONE_ID=${AWS_HOSTED_ZONE_ID}
       - AWS_SDK_LOAD_CONFIG=1
     ports:
       - target: 80

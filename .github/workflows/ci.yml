@@ -243,14 +243,20 @@ jobs:
           PR_NUM: ${{ github.event.number }}
           DOMAIN: ${{ secrets.DOMAIN }}
         run: |
-          PREVIEW_URL="https://pr-${PR_NUM}.dev.${DOMAIN}"
+          HOST="pr-${PR_NUM}.dev.${DOMAIN}"
+          PREVIEW_URL="https://${HOST}/health/ready"
+          echo "Resolving $HOST"
+          getent hosts "$HOST" || echo "::warning::getent failed for $HOST"
+          echo "Target URL: $PREVIEW_URL"
           for attempt in $(seq 1 12); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
-              --max-time 10 "${PREVIEW_URL}/health/ready" || echo "000")
+            HTTP_CODE=$(curl -sS --ipv4 -o /dev/null -w '%{http_code}' \
+              --max-time 10 "$PREVIEW_URL" 2>/tmp/curl.err)
+            RC=$?
             if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "Smoke test passed — ${PREVIEW_URL}"; exit 0
+              echo "Smoke test passed — $PREVIEW_URL"; exit 0
             fi
-            echo "Not ready yet — HTTP $HTTP_CODE (attempt $attempt/12)"
+            echo "Not ready — HTTP=$HTTP_CODE rc=$RC (attempt $attempt/12)"
+            [[ "$attempt" -le 2 ]] && { echo "--- curl stderr ---"; cat /tmp/curl.err; echo "---"; }
             sleep 10
           done
           echo "Smoke test failed after 12 attempts" >&2; exit 1

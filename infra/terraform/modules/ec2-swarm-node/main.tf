@@ -141,18 +141,24 @@ data "aws_iam_policy_document" "route53_acme" {
   count = var.enable_dns01_acme ? 1 : 0
 
   statement {
-    effect = "Allow"
-    actions = [
-      "route53:GetChange",
-      "route53:ListHostedZonesByName",
-    ]
+    effect    = "Allow"
+    actions   = ["route53:ListHostedZonesByName"]
     resources = ["*"]
   }
 
   statement {
-    effect    = "Allow"
-    actions   = ["route53:ChangeResourceRecordSets"]
+    effect = "Allow"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+    ]
     resources = ["arn:aws:route53:::hostedzone/${var.route53_zone_id}"]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["route53:GetChange"]
+    resources = ["arn:aws:route53:::change/*"]
   }
 }
 

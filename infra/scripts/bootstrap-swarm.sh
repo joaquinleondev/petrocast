@@ -15,6 +15,7 @@ TRAEFIK_ACME_EMAIL="${traefik_acme_email}"
 ENV="${env}"
 ACME_RESOLVER="${acme_resolver}"
 DOMAIN="${domain}"
+AWS_HOSTED_ZONE_ID="${route53_zone_id}"
 
 # ── System dependencies ───────────────────────────────────────────────────────
 # Wait for any in-progress apt operations before installing
@@ -92,9 +93,9 @@ else
   TRAEFIK_STACK_SRC="/opt/petrocast/traefik.http01.stack.yml"
 fi
 
-# Substitute only ACME_EMAIL and AWS_REGION — leave other dollar-brace patterns intact
-ACME_EMAIL="$TRAEFIK_ACME_EMAIL" AWS_REGION="$AWS_REGION" \
-  envsubst '$${ACME_EMAIL} $${AWS_REGION}' < "$TRAEFIK_STACK_SRC" > /tmp/traefik-rendered.yml
+# Substitute only Traefik bootstrap variables — leave other dollar-brace patterns intact
+ACME_EMAIL="$TRAEFIK_ACME_EMAIL" AWS_REGION="$AWS_REGION" AWS_HOSTED_ZONE_ID="$AWS_HOSTED_ZONE_ID" \
+  envsubst '$${ACME_EMAIL} $${AWS_REGION} $${AWS_HOSTED_ZONE_ID}' < "$TRAEFIK_STACK_SRC" > /tmp/traefik-rendered.yml
 
 docker stack deploy -c /tmp/traefik-rendered.yml traefik --with-registry-auth
 
