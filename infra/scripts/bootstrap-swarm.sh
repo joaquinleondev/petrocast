@@ -93,7 +93,7 @@ else
 fi
 
 # Substitute only ACME_EMAIL and AWS_REGION — leave other dollar-brace patterns intact
-ACME_EMAIL="$TRAEFIK_ACME_EMAIL" \
+ACME_EMAIL="$TRAEFIK_ACME_EMAIL" AWS_REGION="$AWS_REGION" \
   envsubst '$${ACME_EMAIL} $${AWS_REGION}' < "$TRAEFIK_STACK_SRC" > /tmp/traefik-rendered.yml
 
 docker stack deploy -c /tmp/traefik-rendered.yml traefik --with-registry-auth
