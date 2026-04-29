@@ -4,7 +4,7 @@
 
 ## Descripción
 
-## Video
+## Video Entrega Adenda Fase 1
 
 Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44OcpUzbenkfb).
 
@@ -24,11 +24,11 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44O
 
 ## Estado por fase
 
-| Fase   | Fecha      | Estado           | Demo |
-| ------ | ---------- | ---------------- | ---- |
-| Fase 1 | 2026-04-28 | 🚧 En desarrollo | —    |
-| Fase 2 | 2026-06-09 | ⏳ Pendiente     | —    |
-| Fase 3 | 2026-06-30 | ⏳ Pendiente     | —    |
+| Fase   | Fecha      | Estado           | Demo                               |
+| ------ | ---------- | ---------------- | ---------------------------------- |
+| Fase 1 | 2026-04-28 | ✅ Completa      | [link](https://api.petrocast.shop) |
+| Fase 2 | 2026-06-09 | ⏳ En desarrollo | —                                  |
+| Fase 3 | 2026-06-30 | ⏳ Pendiente     | —                                  |
 
 ## Cómo ejecutar
 
@@ -59,11 +59,11 @@ docker compose -f infra/compose.observability.yml up
 
 El pipeline CI/CD es completamente automatizado vía GitHub Actions:
 
-| Evento | Resultado |
-|--------|-----------|
-| PR abierta/actualizada | Build + Trivy scan + preview efímero en `pr-<N>.dev.petrocast.shop` |
-| Merge a `main` | Rollout a staging (`staging.petrocast.shop`) con rollback automático |
-| Tag `v*` | Despliegue a producción (`api.petrocast.shop`) con approval requerido |
-| PR cerrada | Teardown automático del preview + limpieza ECR |
+| Evento                 | Resultado                                                             |
+| ---------------------- | --------------------------------------------------------------------- |
+| PR abierta/actualizada | Build + Trivy scan + preview efímero en `pr-<N>.dev.petrocast.shop`   |
+| Merge a `main`         | Rollout a staging (`staging.petrocast.shop`) con rollback automático  |
+| Tag `v*`               | Despliegue a producción (`api.petrocast.shop`) con approval requerido |
+| PR cerrada             | Teardown automático del preview + limpieza ECR                        |
 
 Ver [infra/README.md](infra/README.md) para el diagrama de flujo completo y [infra/terraform/README.md](infra/terraform/README.md) para la secuencia de provisioning de la infraestructura AWS.
