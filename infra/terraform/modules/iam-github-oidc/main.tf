@@ -203,6 +203,8 @@ data "aws_iam_policy_document" "deploy_permissions" {
       "ecr:GetDownloadUrlForLayer",
       "ecr:PutImage",
       "ecr:DescribeImages",
+      "ecr:ListImages",
+      "ecr:BatchDeleteImage",
     ]
     resources = [var.ecr_repository_arn]
   }
