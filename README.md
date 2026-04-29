@@ -4,11 +4,15 @@
 
 ## Descripción
 
+## Video
+
+Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44OcpUzbenkfb).
+
 ## Equipo
 
-- Santino Domato — email/github
-- Ignacio Vargas — email/github
-- Joaquin Leon Alderete — jleonalderete@udesa.edu.ar/joaquinleondev
+- Santino Domato — sdomato@udesa.edu.ar / [sdomato](https://github.com/sdomato)
+- Ignacio Vargas — ivargasfernandez@udesa.edu.ar / [ignacio279](https://github.com/ignacio279)
+- Joaquin Leon Alderete — jleonalderete@udesa.edu.ar / [joaquinleondev](https://github.com/joaquinleondev)
 
 ## Documentación
 
