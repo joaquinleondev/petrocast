@@ -55,27 +55,29 @@ Las tres opciones mencionadas difieren en modelo de programación, complejidad o
 
 ### Propuesta
 
-Adoptamos **Prefect 3.x** como herramienta de orquestación, complementado con **dbt Core** para las transformaciones SQL entre capas.
+Adoptamos **Dagster 1.x** como herramienta de orquestación, complementado con **dbt Core** para las transformaciones SQL entre capas.
 
 **Justificación:**
 
-Prefect es la opción con menor sobrecarga operativa para los tres entornos que corren en EC2 `t3.small`. Airflow requiere al menos scheduler, webserver y una base de datos propia, lo que compite en recursos con el resto del stack de Fase 2 (PostgreSQL, Metabase, OpenMetadata). Dagster es técnicamente superior para arquitecturas medallion, pero tiene una curva de aprendizaje mayor dado que su modelo de assets es más distinto al paradigma de scripts secuenciales.
+Dagster es la opción con mejor afinidad con la arquitectura medallion de este proyecto. Su modelo de _software-defined assets_ expresa cada tabla (Bronze, Silver, Gold) como un asset cuyo grafo de dependencias Dagster infiere automáticamente, en lugar de tareas conectadas a mano. Esto alinea el orquestador con el modelo de datos, no con una secuencia de pasos opacos, y hace que las tres capas medallion sean ciudadanos de primera clase de la herramienta.
 
-El modelo de flows de Prefect es idiomático Python: un flujo de ingesta se expresa como una función decorada con `@flow`, sus pasos como funciones con `@task`. Los retries con backoff exponencial son un atributo del decorador: `@task(retries=3, retry_delay_seconds=exponential(base=10, multiplier=1))`. Esto reduce la curva de aprendizaje para un equipo de tres personas en un plazo acotado.
+La integración con dbt vía `dagster-dbt` es la mejor de su categoría: cada modelo dbt aparece como un asset nativo dentro de Dagster, unificando extracción y transformación en un único grafo observable. Airflow y Prefect integran dbt como un paso opaco; Dagster lo integra como assets navegables, lo que potencia el linaje (Pregunta 4) sin componentes extra.
 
-El procedimiento de backfill se implementa como un flow parametrizado: `extract_flow(date_start="2020-01-01", date_end="2024-12-31")` puede invocarse desde la UI de Prefect o por CLI para reprocesar cualquier rango histórico, cubriendo el requisito explícito de la adenda.
+Los retries con backoff son un atributo de la definición del asset (`RetryPolicy(max_retries=3, backoff=Backoff.EXPONENTIAL)`). La idempotencia se obtiene de forma nativa mediante **particiones**: cada asset se particiona por mes y rematerializar una partición la reemplaza de forma determinística.
 
-**Relación con Airflow:**
+El procedimiento de backfill se cubre con el soporte **nativo de particiones** de Dagster: desde la UI o por CLI se puede rematerializar cualquier rango de meses (`--partition-range`), con un calendario visual que muestra qué particiones están materializadas y cuáles no. Esto es más robusto y verificable que un flow parametrizado manual, y cubre el requisito explícito de backfill de la adenda.
 
-Airflow es el estándar de la industria y sería la elección natural en un entorno productivo con infraestructura dedicada. Para este proyecto, el overhead operativo de Airflow supera el beneficio dado el tamaño del equipo y la restricción de infra. El ADR de orquestación documenta esta comparación con detalle y puede usarse en la defensa oral.
+**Relación con Prefect y Airflow:**
+
+Prefect es la alternativa de menor curva de aprendizaje (Python idiomático con `@flow`/`@task`) y Airflow es el estándar de la industria; ambas son válidas. Se elige Dagster porque su modelo de assets y su integración nativa con dbt reducen el pegamento necesario para cubrir tres requisitos de la adenda —medallion, linaje y calidad— que de otro modo requerirían más componentes o código manual. La mayor curva de aprendizaje del modelo de assets es el costo asumido, acotado por el tamaño chico del pipeline (dos fuentes). El consumo de recursos en EC2 `t3.small` es bajo (~400 MB), comparable a Prefect y muy por debajo de Airflow. El ADR de orquestación documenta esta comparación con detalle para la defensa oral.
 
 **Rol de dbt en el stack:**
 
-Las transformaciones Bronze→Silver→Gold se implementan como modelos dbt, que Prefect invoca mediante el integrador `prefect-dbt`. Esto separa responsabilidades: Prefect maneja el scheduling, retries y observabilidad del flujo; dbt maneja las transformaciones SQL, los tests de calidad y genera el grafo de lineage automáticamente.
+Las transformaciones Bronze→Silver→Gold se implementan como modelos dbt, que Dagster invoca mediante el integrador `dagster-dbt`. Esto separa responsabilidades: Dagster maneja el scheduling, retries, particiones y observabilidad del grafo; dbt maneja las transformaciones SQL, los tests de calidad y genera el grafo de lineage automáticamente.
 
 ### Asunciones
 
-- El servidor Prefect corre en el mismo EC2 que el resto del stack (no se usa Prefect Cloud).
+- El servidor de Dagster (`dagster webserver` + `dagster daemon`) corre en el mismo EC2 que el resto del stack (no se usa Dagster+ / Cloud).
 - Las transformaciones son SQL-first (dbt), no PySpark ni operaciones de alta cardinalidad que requieran un motor distribuido.
 - El volumen de datos de las fuentes definidas (dos CSVs de datos.gob.ar) es manejable en un solo nodo PostgreSQL: el dataset de producción de pozos no convencionales tiene del orden de millones de filas históricas, volumen trivial para PostgreSQL en una t3.small.
 
@@ -83,12 +85,13 @@ Las transformaciones Bronze→Silver→Gold se implementan como modelos dbt, que
 
 1. ¿Existe una herramienta de orquestación ya en uso en la organización que sea preferible adoptar (Airflow, Databricks Workflows, AWS Glue)?
 2. ¿El flujo de extracción debe soportar fuentes adicionales en Fase 3 (SCADA, PI System, SAP)? Esto podría favorecer Airflow o Dagster por su ecosistema de conectores.
-3. ¿Se requiere scheduling con frecuencia sub-horaria o near-realtime? Prefect lo soporta, pero Airflow tiene más operadores especializados para esos casos.
+3. ¿Se requiere scheduling con frecuencia sub-horaria o near-realtime? Dagster lo soporta vía schedules/sensors; un volumen near-realtime podría requerir revisar la estrategia de particiones.
 
 ### Referencias
 
-- ADR pendiente: _Selección de herramienta de orquestación_ (Prefect vs Airflow vs Dagster, a escribir al inicio de Fase 2).
-- [Prefect 3.x Docs](https://docs.prefect.io/) — deploy guide, retry decorators, parametrización.
+- ADR pendiente: _Selección de herramienta de orquestación_ (Dagster vs Prefect vs Airflow, a escribir al inicio de Fase 2).
+- [Dagster Docs](https://docs.dagster.io/) — software-defined assets, particiones, backfill, retry policies.
+- [dagster-dbt](https://docs.dagster.io/integrations/dbt) — integración nativa con dbt.
 - ADR-0012: Elección de stack backend Python + PostgreSQL, que define el motor de base de datos compartido entre la API y el DW.
 
 ---
@@ -168,29 +171,33 @@ Además, la adenda exige que la herramienta sea de las "vistas en clase o tutor�
 
 ### Propuesta
 
-Adoptamos **OpenMetadata** como plataforma de gobierno de datos, complementada con el lineage nativo de dbt.
+Adoptamos **DataHub** como plataforma de gobierno de datos, complementada con el lineage nativo de dbt.
 
-**Justificación frente a DataHub:**
+**Justificación:**
 
-DataHub es la herramienta de referencia mencionada en clase y es el estándar en la industria para data governance empresarial. Sin embargo, DataHub requiere Kafka, Elasticsearch y MySQL como dependencias propias — en total ~6 contenedores y ~4 GB RAM, lo que excede la capacidad de la EC2 t3.small cuando corre junto a PostgreSQL, Prefect, Metabase y la API. OpenMetadata logra las mismas tres capacidades requeridas con un footprint significativamente menor (~2 GB RAM, sin Kafka).
+DataHub es la herramienta **nombrada explícitamente por la adenda** ("alguna herramienta vista en clase o tutoría (DataHub)"). Aunque la adenda permite alternativas justificadas, se opta por DataHub para **eliminar el riesgo de evaluación** de usar una herramienta no solicitada: el beneficio de footprint de una alternativa no compensa el riesgo de que la cátedra espere ver DataHub específicamente.
 
-OpenMetadata cubre los tres requisitos de la adenda:
+DataHub cubre los tres requisitos de la adenda:
 
-1. **Workflows**: tiene una sección "Ingestion Pipelines" que muestra el estado y última ejecución del conector de PostgreSQL. Se puede configurar el conector para que catalogue automáticamente las tablas del esquema Gold.
-2. **Datos en el DW**: el catálogo expone todas las tablas con descripciones de columnas, tipos y estadísticas básicas. Las tablas del star schema son navegables por un usuario no técnico.
+1. **Workflows**: las _ingestion sources_ muestran el estado y última ejecución de los conectores (PostgreSQL, dbt, Dagster). El estado de los assets/particiones de Dagster es visible además en la propia UI de Dagster.
+2. **Datos en el DW**: el catálogo expone todas las tablas con descripciones de columnas, tipos y estadísticas. Las tablas del star schema son navegables por un usuario no técnico.
 3. **Última actualización**: la metadata de cada tabla incluye el timestamp de la última ingesta y el número de filas.
 
-El lineage SQL detallado (qué columna de Bronze alimenta qué columna de Gold) se obtiene del grafo de dbt (`dbt docs generate`) y se importa a OpenMetadata via el conector dbt nativo.
+El lineage SQL detallado (qué columna de Bronze alimenta qué columna de Gold) se obtiene del grafo de dbt (`dbt docs generate`) y se importa a DataHub vía su _source_ dbt nativo.
 
-**Nota sobre la elección frente a la recomendación de la cátedra:**
+**Footprint y operación:**
 
-DataHub es válido y sería la elección en un entorno con infraestructura dedicada. La elección de OpenMetadata como alternativa cumple los mismos requisitos funcionales y está debidamente justificada en el ADR de gobierno, lo que tiene más valor pedagógico que adoptar DataHub sin análisis.
+DataHub requiere Kafka, Elasticsearch y MySQL como dependencias (~6 contenedores, ~4 GB RAM), lo que es exigente para una EC2 `t3.small` corriendo junto al resto del stack. Se gestiona **levantando DataHub bajo demanda** (vía `docker compose`) para la demostración de gobierno y linaje, en lugar de mantenerlo encendido de forma permanente junto a Postgres, Dagster, Metabase y la API.
+
+**Nota sobre alternativas:**
+
+**OpenMetadata** sería una alternativa válida y de menor footprint (~2 GB, sin Kafka), que cumple los mismos tres requisitos. Se prioriza DataHub por ser la herramienta explícitamente requerida; la comparación completa queda registrada en el ADR de gobierno para cumplir el requisito de análisis de alternativas.
 
 ### Asunciones
 
-- OpenMetadata se levanta en Docker Compose junto al resto del stack de datos.
-- El lineage de flujos de Prefect se anota manualmente en la metadata de cada tabla (qué flow la generó y cuándo), o mediante el emisor de eventos de Prefect si se implementa la integración.
-- El lineage SQL detallado se obtiene de dbt y se importa a OpenMetadata vía el conector dbt.
+- DataHub se levanta vía Docker Compose bajo demanda para la demostración de gobierno y linaje (no necesariamente de forma permanente junto al resto del stack).
+- El linaje de la orquestación (qué asset/partición de Dagster generó cada tabla y cuándo) es visible en la UI de Dagster; el estado de ingesta se refleja en DataHub.
+- El lineage SQL detallado se obtiene de dbt y se importa a DataHub vía su source dbt.
 
 ### Puntos a validar con el cliente
 
@@ -200,8 +207,9 @@ DataHub es válido y sería la elección en un entorno con infraestructura dedic
 
 ### Referencias
 
-- ADR pendiente: _Selección de plataforma de gobierno de datos_ (OpenMetadata vs DataHub, a escribir al inicio de Fase 2).
-- [OpenMetadata Docs — Docker Compose quickstart](https://docs.open-metadata.org/quick-start/local-docker-deployment).
+- ADR pendiente: _Selección de plataforma de gobierno de datos_ (DataHub vs OpenMetadata, a escribir al inicio de Fase 2).
+- [DataHub Docs — Quickstart con Docker](https://datahubproject.io/docs/quickstart/).
+- [DataHub — dbt integration](https://datahubproject.io/docs/generated/ingestion/sources/dbt/).
 - [dbt Docs — Artifacts y lineage graph](https://docs.getdbt.com/reference/artifacts/dbt-artifacts).
 
 ---
@@ -225,16 +233,16 @@ Cubrimos el linaje con **dos herramientas complementarias ya elegidas en el stac
 
 | Nivel | Herramienta | Cómo |
 | ----- | ----------- | ---- |
-| Linaje de flujo | **Prefect** | Cada flow run registra qué tablas se cargaron, en qué rango de fechas, y con qué resultado |
+| Linaje de flujo | **Dagster** | Cada materialización de asset registra qué se cargó, en qué partición de mes, y con qué resultado; el grafo de assets (extracción + dbt) es navegable en la UI |
 | Linaje SQL (modelo) | **dbt** | `dbt docs generate` produce el grafo de dependencias entre modelos Bronze/Silver/Gold; visible en `dbt docs serve` |
-| Catálogo + linaje integrado | **OpenMetadata** | Ingesta el grafo de dbt via conector; lo presenta en una UI navegable junto al catálogo de tablas |
+| Catálogo + linaje integrado | **DataHub** | Ingesta el grafo de dbt vía su source; lo presenta en una UI navegable junto al catálogo de tablas |
 
-No se añade una herramienta separada para linaje porque la combinación Prefect + dbt + OpenMetadata cubre el requisito sin componentes adicionales. Herramientas especializadas como Marquez o OpenLineage agregarían complejidad sin beneficio incremental dado el volumen y número de fuentes de Fase 2.
+No se añade una herramienta separada para linaje porque la combinación Dagster + dbt + DataHub cubre el requisito sin componentes adicionales. Herramientas especializadas como Marquez o OpenLineage agregarían complejidad sin beneficio incremental dado el volumen y número de fuentes de Fase 2.
 
 ### Asunciones
 
 - El linaje columnar exhaustivo (rastrear una columna individual de la fact table hasta el CSV fuente) se considera nice-to-have para esta fase, no obligatorio. El linaje a nivel de modelo (Bronze → Silver → Gold) es el mínimo exigido.
-- Si en Fase 3 se agregan múltiples fuentes heterogéneas, se evalúa incorporar OpenLineage como capa estándar entre Prefect y OpenMetadata.
+- Si en Fase 3 se agregan múltiples fuentes heterogéneas, se evalúa incorporar OpenLineage como capa estándar entre Dagster y DataHub.
 
 ### Puntos a validar con el cliente
 
@@ -244,7 +252,7 @@ No se añade una herramienta separada para linaje porque la combinación Prefect
 ### Referencias
 
 - ADR pendiente: _Estrategia de linaje y gobierno de datos_ (a escribir al inicio de Fase 2, puede unificarse con el ADR de gobierno).
-- [OpenMetadata — dbt connector](https://docs.open-metadata.org/connectors/pipeline/dbt).
+- [DataHub — dbt source](https://datahubproject.io/docs/generated/ingestion/sources/dbt/).
 
 ---
 
@@ -278,11 +286,11 @@ Cada ejecución descarga el CSV completo de datos.gob.ar y reemplaza la tabla Br
 
 **Silver — idempotente por partición de mes:**
 
-Cada ejecución procesa el rango de meses indicado por parámetro (`date_start`, `date_end`), elimina los registros Silver existentes para ese rango, y los reinserta transformados desde Bronze. Un re-run del mismo período produce el mismo resultado, lo que satisface el requisito de idempotencia. Este mecanismo también permite el backfill: invocar el flow con un rango histórico reprocesa sólo ese rango.
+Cada partición de mes procesa su propio rango, elimina los registros Silver existentes para ese mes, y los reinserta transformados desde Bronze. Un re-run de la misma partición produce el mismo resultado, lo que satisface el requisito de idempotencia. Este mecanismo también habilita el backfill: rematerializar un rango de particiones de mes en Dagster (`--partition-range`) reprocesa sólo esos meses, con seguimiento visual de qué particiones quedaron materializadas.
 
 **Gold — upsert por clave de negocio:**
 
-La fact table se actualiza con `INSERT ... ON CONFLICT (well_id, date) DO UPDATE`. Las tablas de dimensiones (`dim_well`, `dim_date`) usan upsert por surrogate key. Esto soporta correcciones históricas sin duplicar registros y mantiene el estado del DW consistente entre ejecuciones.
+La fact table se actualiza con `INSERT ... ON CONFLICT (well_sk, date_sk) DO UPDATE`. Las tablas de dimensiones (`dim_well`, `dim_company`, `dim_date`) usan upsert por surrogate key. Las surrogate keys son un **hash determinístico** de la clave de negocio (`dbt_utils.generate_surrogate_key`), no un contador autoincremental: así el upsert encuentra siempre la misma fila entre ejecuciones y no duplica. Esto soporta correcciones históricas sin duplicar registros y mantiene el estado del DW consistente entre ejecuciones.
 
 **Justificación de full para Bronze:**
 
@@ -335,7 +343,7 @@ dbt tiene un mecanismo nativo de `store_failures = true` que persiste las filas 
 
 ### Asunciones
 
-- dbt Core está disponible en el entorno de ejecución de los flows de Prefect.
+- dbt Core está disponible en el entorno de ejecución de Dagster (vía `dagster-dbt`).
 - El umbral de falla para completitud es > 1% de nulos (no cero), dado que el dataset fuente puede tener huecos menores aceptables en campos opcionales (producción de agua, downtime).
 - Los tests corren sobre el esquema Silver antes de que dbt ejecute los modelos Gold.
 
@@ -371,10 +379,10 @@ Silver ──── si falla → pipeline se detiene; Gold no se actualiza
   ↓ [check: completitud + unicidad + validez + frescura]
 Gold ──────  si falla → pipeline se detiene; Metabase muestra datos del run anterior
   ↓
-Metabase / OpenMetadata
+Metabase / DataHub
 ```
 
-Cuando un check falla, Prefect marca el flow como `FAILED`. El estado visible en la UI de Prefect y en OpenMetadata es "pipeline con error desde [fecha]". El equipo recibe una notificación automática vía webhook de Prefect.
+Los checks de calidad se implementan como **dbt tests** envueltos en **asset checks bloqueantes de Dagster**: cuando un check falla, Dagster **detiene la materialización de los assets aguas abajo** (Gold no se actualiza) y marca el asset check como fallido. El estado es visible en la UI de Dagster ("asset bloqueado por check fallido desde [fecha]") y en DataHub. Un **sensor de Dagster** dispara la notificación automática (Slack/email).
 
 **Justificación frente a alternatives:**
 
@@ -384,7 +392,7 @@ La _alerta solamente_ sin bloqueo es insuficiente: si nadie actúa en tiempo, lo
 
 ### Asunciones
 
-- Prefect puede enviar notificaciones via webhook o integración de Slack en el plan open source (self-hosted).
+- Dagster puede enviar notificaciones via sensores e integraciones (Slack/email) en su versión open source self-hosted.
 - El equipo tiene configurado un canal de Slack o email donde recibir las alertas de pipeline fallido.
 - Los datos previos en el Gold (del último run exitoso) permanecen disponibles en Metabase mientras se resuelve la falla.
 
@@ -397,7 +405,8 @@ La _alerta solamente_ sin bloqueo es insuficiente: si nadie actúa en tiempo, lo
 ### Referencias
 
 - ADR pendiente: _Estrategia de calidad de datos en la capa medallion_ (mismo ADR que Pregunta 6).
-- [Prefect Docs — Notifications y Automations](https://docs.prefect.io/3.x/automate/events/automations-triggers/).
+- [Dagster Docs — Asset checks](https://docs.dagster.io/concepts/assets/asset-checks).
+- [Dagster Docs — Sensors](https://docs.dagster.io/concepts/partitions-schedules-sensors/sensors).
 
 ---
 
@@ -415,23 +424,23 @@ Escribimos dos runbooks:
 
 **Runbook 1 — Data Engineer: Reprocesamiento histórico (backfill)**
 
-Procedimiento para reprocesar datos de un rango de fechas específico cuando el dataset fuente fue corregido o el pipeline falló en una ejecución pasada. Pasos: verificar el fallo en la UI de Prefect, identificar el rango afectado, invocar el backfill flow con los parámetros correctos, verificar que los checks de calidad pasan y que el Gold fue actualizado, notificar al equipo.
+Procedimiento para reprocesar datos de un rango de fechas específico cuando el dataset fuente fue corregido o el pipeline falló en una ejecución pasada. Pasos: verificar el fallo en la UI de Dagster, identificar el rango de particiones de mes afectado, lanzar el backfill de esas particiones desde Dagster (UI o CLI), verificar que los asset checks de calidad pasan y que el Gold fue actualizado, notificar al equipo.
 
 Decisiones a justificar:
 
 - _Funcional:_ por qué el backfill reprocesa desde Bronze (no desde Silver), garantizando que ningún dato corrupto de ejecuciones previas contamine el reprocesamiento.
 - _No funcional:_ por qué el backfill corre fuera del horario de negocio para evitar contención de queries en el mismo PostgreSQL que sirve a Metabase.
 
-**Runbook 2 — Analista de BI / Data Analyst: Construcción de un nuevo dashboard en Metabase**
+**Runbook 2 — Data Owner: Resolución de incidente de calidad (decisión de aptitud del dato)**
 
-Procedimiento para que un analista no técnico acceda a Metabase, explore el modelo estrella del Gold layer, y publique un dashboard de seguimiento de producción por cuenca. Pasos: acceder a Metabase en la URL del entorno, seleccionar la tabla `fact_production` del esquema `gold`, construir una pregunta con el Query Builder visual, crear un dashboard y compartirlo.
+Procedimiento para el responsable de negocio del dominio "producción de pozos" cuando un check de calidad **bloquea la promoción a Gold** (ver Pregunta 7), o un consumidor reporta un dato sospechoso. El Data Owner no implementa: **decide si el dato es apto para uso**. Pasos: recibir la alerta de pipeline bloqueado; en Dagster, identificar qué asset check falló y revisar la tabla de filas fallidas persistida (`store_failures`); en DataHub, usar el linaje para ver qué dashboards de Metabase y qué usuarios quedan afectados (análisis de impacto); decidir entre (a) mantener el bloqueo y pedir reproceso al Data Engineer, (b) aprobar una excepción documentada, o (c) marcar el dato como _deprecated_ en DataHub; comunicar la decisión a los consumidores; registrar la decisión (quién, cuándo, por qué).
 
 Decisiones a justificar:
 
-- _Funcional:_ por qué el modelo estrella expuesto tiene `dim_well` como única dimensión no temporal en Fase 2 (en lugar de dimensiones de operadora y cuenca separadas), y qué impacto tiene en la granularidad de los filtros disponibles.
-- _No funcional:_ por qué el usuario de Metabase tiene permisos de sólo lectura sobre el esquema `gold` y no sobre `bronze` ni `silver`, protegiendo los datos intermedios de modificaciones accidentales.
+- _Funcional:_ por qué el Data Owner **define el umbral de "aptitud para uso"** (ej. permitir publicar Gold con 98% de completitud si los faltantes corresponden a pozos inactivos) — es una regla de negocio, no técnica, y la owna porque responde ante los usuarios no técnicos si el dato está mal.
+- _No funcional:_ por qué el Data Owner **fija el SLA de resolución de incidentes** (ej. < 4 h hábiles) balanceando frescura vs confiabilidad — su incentivo es que los planificadores confíen en los dashboards, y un dato viejo pero confiable le cuesta menos que uno fresco pero sucio.
 
-Los runbooks se escriben en `docs/runbooks/data-engineer.md` y `docs/runbooks/bi-analyst.md` una vez que el pipeline esté implementado, para que reflejen la realidad del sistema.
+Los runbooks se escriben en `docs/runbooks/data-engineer.md` y `docs/runbooks/data-owner.md` una vez que el pipeline esté implementado, para que reflejen la realidad del sistema.
 
 ### Asunciones
 
@@ -471,7 +480,7 @@ No implementamos semantic layer formal en Fase 2. Como alternativa liviana, crea
 
 **Justificación:**
 
-El scope de Fase 2 ya incluye extracción, pipeline medallion completo, DW con star schema, Metabase, OpenMetadata, chequeos de calidad con persistencia, linaje, dos runbooks y seis ADRs. Agregar dbt Semantic Layer incrementa el riesgo de no terminar los ítems obligatorios. Además, dbt Semantic Layer con MetricFlow requiere dbt Cloud o una integración no trivial; no es un agregado gratuito sobre dbt Core.
+El scope de Fase 2 ya incluye extracción, pipeline medallion completo, DW con star schema, Metabase, DataHub, chequeos de calidad con persistencia, linaje, dos runbooks y seis ADRs. Agregar dbt Semantic Layer incrementa el riesgo de no terminar los ítems obligatorios. Además, dbt Semantic Layer con MetricFlow requiere dbt Cloud o una integración no trivial; no es un agregado gratuito sobre dbt Core.
 
 Las métricas necesarias para la demo de Fase 2 (producción mensual por pozo, evolución histórica, top pozos) se pueden definir directamente en Metabase o como vistas en Gold sin una capa semántica independiente.
 
@@ -498,17 +507,17 @@ El stack propuesto para Fase 2:
 ```
 datos.gob.ar (CSV — producción de pozos + listado de pozos)
     ↓
-Prefect flow — extracción, scheduling, retries con backoff
+Dagster — extracción (assets particionados por mes), scheduling, retries con backoff
     ↓
 schema: bronze (PostgreSQL, full refresh por ejecución)
     ↓ dbt tests: schema
 schema: silver (PostgreSQL, idempotente por partición de mes)
-    ↓ dbt tests: completitud + unicidad + validez + frescura
-schema: gold (PostgreSQL, star schema: fact_production, dim_well, dim_date)
+    ↓ dbt tests: completitud + unicidad + validez + frescura (asset checks bloqueantes)
+schema: gold (PostgreSQL, star schema: fact_production, dim_well, dim_company, dim_date)
     ├── Metabase OSS (BI para usuarios no técnicos — puerto 3001)
-    └── OpenMetadata (catálogo + linaje dbt + estado de workflows)
+    └── DataHub (catálogo + linaje dbt + estado de ingesta) — bajo demanda
          ↑
-    Prefect UI (estado de flows, logs, historial — puerto 4200)
+    Dagster UI (estado de assets/particiones, logs, historial — puerto 3000)
 
 apps/api (FastAPI) — repositories/ se conecta al esquema gold en Fase 2
 ```
@@ -517,16 +526,17 @@ Resumen de decisiones:
 
 | Decisión | Elección | Motivación principal |
 | -------- | -------- | -------------------- |
-| Orquestación | Prefect 3.x | Menor overhead operativo que Airflow; setup de un proceso |
+| Orquestación | Dagster 1.x | Modelo de assets afín a medallion; integración nativa con dbt (`dagster-dbt`); backfill por particiones |
 | Transformaciones | dbt Core | Linaje SQL automático; tests persistidos con `store_failures` |
 | Data Warehouse | PostgreSQL 16 (schemas bronze/silver/gold) | Ya definido en ADR-0012; sin componente nuevo |
+| Modelo dimensional | Star schema: `fact_production` + `dim_well`, `dim_company`, `dim_date`; SK hash determinístico; SCD Tipo 1 | Operadora como dimensión propia (filtro de negocio frecuente); SK hash compatible con upsert |
 | BI | Metabase OSS | UI sin SQL; una imagen Docker; ideal para no-técnicos |
-| Gobierno de datos | OpenMetadata | Catálogo + linaje + freshness; menor footprint que DataHub |
+| Gobierno de datos | DataHub | Herramienta explícitamente requerida por la adenda; riesgo de evaluación cero |
 | Carga Bronze | Full refresh | Idempotente; simple; validado por naturaleza del CSV fuente |
 | Carga Silver/Gold | Idempotente por partición + upsert | Soporta correcciones históricas |
 | Calidad | 5 dimensiones, `store_failures = true` | Resultados persistidos; bloqueo de promoción ante falla |
-| Consecuencia calidad | Bloqueo de promoción + notificación | Protege a usuarios no técnicos de datos sucios en Metabase |
-| Runbooks | Data Engineer + Analista de BI | Cubre un rol técnico y uno de negocio |
+| Consecuencia calidad | Bloqueo de promoción (asset checks Dagster) + notificación | Protege a usuarios no técnicos de datos sucios en Metabase |
+| Runbooks | Data Engineer + Data Owner | Cubre un rol técnico y uno de negocio |
 | Semantic layer | No en Fase 2 (vistas SQL como alternativa liviana) | Reduce riesgo de no entregar obligatorios |
 
 ## Conexión con la arquitectura de Fase 1
@@ -542,3 +552,4 @@ Este Addendum **no modifica** el PRD v0.2. Agrega precisiones que deben leerse j
 | Versión | Fecha | Cambios |
 | ------- | ----- | ------- |
 | v0.3 | 2026-06-01 | Versión inicial con respuestas a las 9 preguntas abiertas de la adenda técnica de Fase 2. |
+| v0.3.1 | 2026-06-03 | Revisión de stack: orquestación **Dagster** (era Prefect) por afinidad con medallion e integración nativa con dbt; gobierno **DataHub** (era OpenMetadata) por ser la herramienta requerida por la adenda; modelo dimensional explicitado con **`dim_company`** como dimensión propia y surrogate keys hash; backfill y bloqueo de calidad vía particiones y asset checks de Dagster; runbook de **Data Owner** (era Analista de BI). |
