@@ -6,7 +6,7 @@ En esta etapa se busca desarrollar un mock de la funcionalidad del sistema base 
 
 ## Arquitectura
 
-![](../assets/prd-fase-1-diagram-1.png)
+![](../assets/adenda-fase-1-fig-1.png)
 
 ### Integración Continua y Despliegue Continuo (CI/CD)
 

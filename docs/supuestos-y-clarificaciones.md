@@ -1,146 +1,68 @@
-# Addendum v0.2 al PRD — Plataforma Predictiva
+# Supuestos y clarificaciones al PRD — Plataforma Predictiva
 
-- **Versión:** v0.2
-- **Fecha:** 2026-04-21
+- **Versión:** v0.3
+- **Fecha:** 2026-06-07
 - **Autores:** Equipo Petrocast
-- **Estado:** Propuesto — pendiente de validación con cliente
-- **Documento padre:** [PRD v0.1](./prd-v0.1.md)
+- **Estado:** Vigente — preguntas abiertas pendientes de validación
+- **Documento padre:** [PRD v0.1](./assignment/prd.md)
 
 ## Propósito
 
-El PRD v0.1 deja explícitamente cuatro preguntas abiertas que requieren
-respuesta antes de avanzar con la especificación técnica detallada de cada
-fase. Este documento:
+El PRD v0.1 dejó cuatro preguntas abiertas. La **Adenda Técnica de Fase 2**
+resolvió la Pregunta 1 (fuentes y especificación de datos), por lo que su
+propuesta original se retira y este documento se reencuadra como **catálogo de
+ambigüedades y preguntas abiertas** pendientes:
 
-1. Propone respuestas fundamentadas a cada pregunta abierta.
-2. Documenta las asunciones que soportan cada respuesta.
-3. Identifica los puntos que, en un proyecto real, requerirían validación
-   con el cliente antes de ser considerados definitivos.
+1. Las preguntas del PRD que siguen sin resolver: horizontes (P2), seguridad
+   de producción (P3, solo Fase 1 está cerrada) y baseline del KPI (P4).
+2. Las **ambigüedades y preguntas abiertas que introduce la propia Adenda de
+   Fase 2** (sección final).
 
-Las decisiones que emergen de este Addendum se profundizan en ADRs
-específicos referenciados al final de cada sección. El Addendum es el
-resumen ejecutivo; los ADRs son el análisis completo.
+Para cada punto se deja la lectura/propuesta tentativa del equipo y lo que, en
+rigor, debería confirmarse con la cátedra/cliente antes de cerrarlo. Las
+decisiones de diseño se profundizan en ADRs.
 
-## Cómo leer este documento
-
-Cada sección sigue la misma estructura:
-
-- **Pregunta original** tal como aparece en el PRD.
-- **Contexto** que clarifica el alcance y las implicancias de la
-  pregunta.
-- **Propuesta** del equipo con justificación.
-- **Asunciones** que soportan la propuesta.
-- **Puntos a validar con el cliente** antes de cerrar la decisión.
+> **Estado:** ✅ resuelta · ⚠️ ambigüedad o decisión abierta.
 
 ---
 
-## Pregunta 1 — Fuentes de datos y especificaciones
+## Pregunta 1 — Fuentes y especificación de datos · ✅ RESUELTA por la Adenda de Fase 2
 
 > _¿Cuáles son las fuentes de datos específicas (sistemas, bases de datos)
 > que se utilizarán para la ingesta de datos históricos de producción,
 > pozos y variables operativas? Se requiere la especificación técnica de
 > los esquemas de datos._
 
-### Contexto
+La Adenda Técnica de Fase 2 **cierra esta pregunta**: dejó de ser un supuesto
+del equipo. Se retira la propuesta original (formato canónico inventado,
+conector de _upload_ manual de CSV y dataset sintético como fuente), que quedó
+obsoleta y, en unidades y granularidad, era incorrecta.
 
-Esta pregunta condiciona todo el diseño del módulo de ingesta (Fase 2). En
-la industria de oil & gas (upstream), las fuentes típicas de datos de
-producción son:
+**Lo que fijó la cátedra** (`adenda-fase-2.md`):
 
-- **Sistemas SCADA** (Supervisory Control and Data Acquisition): capturan
-  mediciones en tiempo real de sensores en pozos y facilities.
-- **Historiadores de procesos** (típicamente OSIsoft PI System o Aveva
-  PI): almacenan series temporales de alta frecuencia con retención larga.
-- **Sistemas de allocation**: distribuyen la producción agregada medida en
-  facilities entre los pozos individuales (la medición por pozo en tiempo
-  real es cara, así que se estima por reglas).
-- **Reportes diarios de producción (DPR)**: archivos o registros manuales
-  con el volumen diario por pozo.
-- **Sistemas de gestión de operaciones** (ej: IBM Maximo) para eventos de
-  workover, downtime planificado, etc.
-- **Data lakes corporativos** donde se consolidan las anteriores (patrón
-  moderno en empresas con madurez de datos).
+- **Fuentes** (datos.gob.ar — Secretaría de Energía, "Capítulo IV", No Convencional):
+  - Producción por pozo: `energia_b5b58cdc-9e07-41f9-b392-fb9ec68b0725`.
+  - Listado de pozos por empresas operadoras (complementaria → tabla maestra de
+    pozos): `energia_cbfa4d79-ffb3-4096-bab5-eb0dde9a8385`.
+- Arquitectura **medallion**, **modelo estrella** en el DWH, orquestador con
+  DAGs como código, gobierno con **DataHub** y chequeos de calidad persistidos.
 
-El formato típico de los datos es **series temporales** con granularidad
-diaria o mensual para producción agregada, y granularidad mayor (minutos
-u horas) para datos de SCADA.
+**Esquema real** (verificado contra la fuente; reemplaza al esquema asumido):
 
-### Propuesta
+| Aspecto         | Realidad de la fuente                                                              |
+| --------------- | ---------------------------------------------------------------------------------  |
+| Granularidad    | **Mensual** (una fila por pozo-mes), no diaria                                     |
+| Unidades        | `prod_pet` [m³], `prod_gas` [miles de m³], `prod_agua` [m³] — sistema **métrico**  |
+| Identificadores | `sigla` (string, boca de pozo) + `idpozo` (int, por formación productiva)          |
+| Tiempo efectivo | `tef` (días con producción en el mes) → permite derivar caudal diario              |
+| Cobertura       | 2006–2026; miles de pozos (no convencional)                                        |
 
-Para el alcance del trabajo integrador, proponemos un **enfoque por
-capas de compatibilidad**:
+Esto **resuelve además** la sub-pregunta #5 del documento original (formato de
+identificadores de pozo): es `sigla`/`idpozo`, no UWI/API number.
 
-**Capa 1 — Formato de intercambio estándar (obligatoria para todas las
-fases):**
-
-Definimos un formato CSV/Parquet canónico que representa el estado de la
-verdad sobre los datos de producción. Este formato está desacoplado de la
-fuente original y es el que consume el motor de pronóstico. Esquema
-mínimo propuesto:
-
-| Columna             | Tipo            | Descripción                              | Obligatoria |
-| ------------------- | --------------- | ---------------------------------------- | ----------- |
-| `well_id`           | string          | Identificador único del pozo             | Sí          |
-| `date`              | date (ISO 8601) | Fecha de la medición                     | Sí          |
-| `oil_rate_bbl_d`    | float           | Producción de petróleo en bbl/día        | Sí          |
-| `gas_rate_mscf_d`   | float           | Producción de gas en Mscf/día            | Opcional    |
-| `water_rate_bbl_d`  | float           | Producción de agua en bbl/día            | Opcional    |
-| `downtime_hours`    | float           | Horas sin producción en el día           | Opcional    |
-| `data_quality_flag` | enum            | `measured`, `allocated`, `estimated`     | Sí          |
-| `source_system`     | string          | Nombre del sistema origen (trazabilidad) | Sí          |
-
-**Capa 2 — Conectores específicos (agregables por fase):**
-
-La arquitectura preverá que la fuente real pueda ser enchufable mediante
-adaptadores (patrón de integración estándar). Para Fase 2 implementamos
-un adaptador de referencia: **upload manual de CSV** vía interfaz web o
-endpoint de API. Adaptadores adicionales (PI System, base de datos SQL,
-S3, etc.) quedan fuera de alcance pero la arquitectura los permite.
-
-**Capa 3 — Datos sintéticos para desarrollo y demo:**
-
-Dado que no tenemos acceso a datos reales de un operador, generaremos un
-**dataset sintético** con curvas de producción realistas (basadas en
-modelos de Arps) para poblar el sistema durante desarrollo y demo. Este
-dataset reside en `data/synthetic/` y es el que se carga en la demo de
-Fase 1.
-
-### Asunciones
-
-- El "cliente" del sistema es un área de planificación que ya cuenta con
-  sus datos de producción consolidados en algún sistema interno, y puede
-  exportarlos a CSV o Parquet.
-- Las variables de mayor valor para el pronóstico son oil rate, gas rate
-  y downtime. Otras variables (presiones, temperaturas, GOR, BSW) pueden
-  sumarse en iteraciones futuras.
-- La granularidad diaria es suficiente para los horizontes de pronóstico
-  de planning (ver Pregunta 2). Granularidad horaria o menor no aporta
-  valor incremental para pronóstico de medio y largo plazo.
-- El sistema puede ingestar datos históricos de hasta 10 años hacia
-  atrás por pozo, con pozos activos del orden de decenas a centenas
-  (no miles) para el MVP.
-
-### Puntos a validar con el cliente
-
-Antes de cerrar Fase 2, en un proyecto real se debería validar:
-
-1. ¿Cuál es el sistema fuente real (PI, SAP, data lake)? Esto define el
-   primer conector concreto a implementar.
-2. ¿Cuál es la volumetría real? (cantidad de pozos, años de histórico,
-   granularidad). Impacta dimensionamiento de infraestructura.
-3. ¿Qué variables operativas adicionales (workover, inyección,
-   ESP/PCP parameters) están disponibles y cuáles son prioritarias?
-4. ¿Existen datos de reservorio (PVT, pruebas de presión, logs) que
-   deban integrarse? Pueden mejorar significativamente los modelos.
-5. ¿Cuál es el formato de los identificadores de pozo? (código interno,
-   API number, UWI).
-
-### Referencias
-
-- ADR pendiente: _Formato de intercambio de datos y estrategia de
-  adaptadores_ (a escribir en inicio de Fase 2).
-- Adenda técnica de Fase 2 (detallará el esquema completo y los
-  adaptadores concretos).
+Las decisiones que la adenda **delega** (grano, SCD, tipo de carga, BI, etc.) y
+las **ambigüedades que deja abiertas** se tratan en
+[Ambigüedades de la Adenda de Fase 2](#ambigüedades-y-preguntas-abiertas-de-la-adenda-de-fase-2).
 
 ---
 
@@ -482,24 +404,103 @@ completitud y para cumplir literalmente con lo que dice el PRD original.
 
 ---
 
+## Ambigüedades y preguntas abiertas de la Adenda de Fase 2
+
+La Adenda de Fase 2 fija el **qué** (fuentes, medallion, modelo estrella,
+DataHub) pero deja puntos sin cerrar. Se separan en (A) ambigüedades que
+conviene **confirmar con la cátedra** y (B) decisiones que la adenda **delega
+en el equipo** y deben cerrarse en ADRs.
+
+### A. Ambigüedades a confirmar con la cátedra
+
+**⚠️ A1 — Fecha de entrega contradictoria.** El PRD fija Fase 2 el
+**2026-06-09** (Roadmap) y la adenda dice **15 de junio** (`adenda-fase-2.md:80`).
+Asumimos que rige la adenda (15-jun) por ser posterior y específica; confirmar.
+
+**⚠️ A2 — Alcance de la ingesta no acotado.** La fuente cubre **2006–2026** y
+**miles de pozos** (todo el no convencional del país). La adenda no dice cuánto
+histórico ni qué universo ingestar: ¿serie completa o una ventana? ¿todo el país
+o una cuenca (p. ej. Neuquina)? Impacta volumetría, costo e infraestructura.
+_Supuesto:_ serie completa del dataset no convencional; se acotará si el costo lo
+exige.
+
+**⚠️ A3 — Reconciliación con el contrato de API de Fase 1.** La API de Fase 1
+expone `id_well` (string), fechas **diarias** (`YYYY-MM-DD`) y un escalar `prod`
+sin unidad; la fuente real es **mensual**, **métrica** y multi-fluido. Queda sin
+definir: `id_well` ¿es `sigla` o `idpozo`? (un pozo puede producir de varias
+formaciones → distinto grano); `prod` ¿es petróleo, gas o equivalente, y en qué
+unidad?; ¿cómo se sirve un dato mensual sobre un contrato de fechas diarias?
+_Supuesto:_ `id_well = sigla`, `prod = prod_pet` en m³, devolviendo el valor del
+mes correspondiente a cada fecha. A validar.
+
+**⚠️ A4 — Unidad de las métricas de negocio.** La adenda no dice en qué unidad
+exponer la producción en el semantic/BI layer: ¿m³ nativo, BOE, o bbl/Mscf para
+alinear con el vocabulario de industria? _Supuesto:_ m³ nativo en silver/gold;
+conversión solo en la capa de presentación si se pide.
+
+**⚠️ A5 — "Ver los datos en el data warehouse" desde el gobierno.** La adenda
+pide ver "los datos en el DWH" en la plataforma de gobierno
+(`adenda-fase-2.md:27-30`), pero DataHub es un **catálogo de metadata y linaje**,
+no un visor de filas. ¿Alcanza metadata + lineage + última actualización, o
+esperan preview de datos? _Lectura:_ metadata, esquema, linaje y frescura en
+DataHub; el preview de filas vive en la herramienta de BI. (Nota: en la adenda
+esos ítems están mal anidados como bullets sueltos.)
+
+**⚠️ A6 — Tercera dimensión de calidad de datos.** Se exigen "mínimo 3
+dimensiones de las vistas en clase, como schema y linaje" (`adenda-fase-2.md:45`):
+schema y linaje son dos; la tercera depende del material de clase. _Supuesto:_
+sumamos **completitud** y **unicidad/validez** sobre claves de negocio.
+Confirmar cuáles cuentan.
+
+**⚠️ A7 — PII / privacidad en runbooks.** Los runbooks deben tratar
+privacidad/PII (`adenda-fase-2.md:65`), pero la fuente es **dato público**.
+_Lectura:_ documentamos "sin PII (dato público)" y enfocamos esa dimensión en
+integridad y uso responsable. Confirmar que basta.
+
+### B. Decisiones que la adenda delega en el equipo (cerrar en ADRs)
+
+No son ambigüedades de la consigna sino elecciones nuestras, pedidas
+explícitamente como ADR con comparación de alternativas:
+
+- **Orquestador:** Airflow vs Prefect vs Dagster (`adenda-fase-2.md:31`).
+- **Tipo de carga:** full / incremental append / merge / upsert
+  (`adenda-fase-2.md:34`). La fuente publica **DDJJ rectificadas** (revisa meses
+  pasados) → empuja a **merge/upsert** por clave natural; a justificar.
+- **Grano de la fact y clave natural:** el grano nativo es **pozo-mes**; clave
+  candidata `(idpozo, anio, mes)` (¿o `sigla`?). Define la idempotencia del
+  reproceso (`adenda-fase-2.md:48-52`).
+- **SCD de las dimensiones** (empresa/área/yacimiento pueden cambiar)
+  (`adenda-fase-2.md:52`).
+- **Herramienta de BI** (`adenda-fase-2.md:26`): Metabase / Superset / Power BI / otra.
+- **Roles + runbooks:** elegir ≥2 roles (uno de negocio, uno técnico)
+  (`adenda-fase-2.md:54`).
+
+> **Impacto en P2 y P4:** la fuente **mensual en m³** vuelve tentativa la
+> "salida diaria" propuesta en la Pregunta 2 (solo alcanzable por interpolación)
+> y obliga a expresar el MAPE/MAE en **m³**, no en bbl/d, en la Pregunta 4.
+
+---
+
 ## Síntesis
 
-Las respuestas propuestas en este Addendum se sostienen sobre un patrón
-común: **diseñar para lo concreto que vamos a construir, pero dejar la
-arquitectura abierta a lo que en un proyecto real se validaría con el
-cliente**.
+Tras la Adenda de Fase 2:
 
-Puntos clave que quedan pendientes de validación con cliente (y que, en
-un proyecto real, bloquearían el avance a la fase siguiente sin
-respuesta):
+- **Resuelto:** fuentes y especificación de datos (P1) — la cátedra fijó
+  datasets, medallion, modelo estrella y gobierno.
+- **Sigue abierto (PRD):** horizontes (P2), seguridad de producción (P3, solo
+  Fase 1 cerrada) y baseline del KPI (P4) — temas de Fase 3.
+- **Nuevo (Adenda Fase 2):** ambigüedades A1–A7 y decisiones delegadas (B).
 
-1. Sistema(s) fuente real(es) de datos de producción.
-2. Horizonte de planning crítico para el negocio.
-3. Existencia y requerimientos de identity provider corporativo.
-4. MAPE actual del proceso manual (baseline de negocio real).
+Puntos que, en un proyecto real, bloquearían el avance sin respuesta de la
+cátedra/cliente:
 
-Para el MVP del TP, asumimos respuestas razonables a estos puntos con
-el fin de avanzar, y lo documentamos explícitamente.
+1. Fecha de entrega efectiva de Fase 2 (A1).
+2. Reconciliación de la API de Fase 1 con el dato real mensual/métrico (A3).
+3. Horizonte de planning crítico para el negocio (P2).
+4. MAPE actual del proceso manual / baseline real (P4).
+
+Para el MVP del TP asumimos respuestas razonables y las documentamos
+explícitamente.
 
 ## Cambios respecto al PRD original
 
@@ -513,4 +514,5 @@ delta explícito.
 | Versión | Fecha      | Cambios                                                                                             |
 | ------- | ---------- | --------------------------------------------------------------------------------------------------- |
 | v0.1    | 2026-04-20 | Versión inicial con respuestas a las 4 preguntas abiertas.                                          |
-| v0.2    | 2026-04-XX | Actualizada Pregunta 3 con decisión de cliente para Fase 1 (API key estática según adenda técnica). |
+| v0.2    | 2026-04-21 | Actualizada Pregunta 3 con decisión de cliente para Fase 1 (API key estática según adenda técnica). |
+| v0.3    | 2026-06-07 | La Adenda de Fase 2 resuelve la P1: se retira la propuesta original y el documento se reencuadra como catálogo de ambigüedades. Se agregan las ambigüedades A1–A7 y las decisiones delegadas (B) de la Fase 2. |

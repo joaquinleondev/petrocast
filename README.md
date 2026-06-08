@@ -16,11 +16,12 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44O
 
 ## Documentación
 
-- [PRD](docs/prd/prd-v0.1.md)
-- [Addendum del PRD (decisiones sobre preguntas abiertas)](docs/prd/addendum-v0.2.md)
+- [Consigna de la materia (PRD y adendas)](docs/assignment/)
+- [PRD — Fase 2](docs/prd/prd-v0.2.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
-- [Backlog](docs/backlog/user-stories.md)
+- [Backlog de Fase 2](docs/backlog/issues-fase-2.md)
+- [Supuestos y clarificaciones](docs/supuestos-y-clarificaciones.md)
 
 ## Estado por fase
 
