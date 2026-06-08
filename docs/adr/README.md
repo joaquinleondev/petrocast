@@ -54,3 +54,4 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0019](./0019-infraestructura-terraform-aws.md)           | Terraform AWS por ambiente               | Aceptado | 2026-04-21 |
 | [0020](./0020-estructura-directorios-backend.md)          | Estructura directorios backend           | Aceptado | 2026-04-22 |
 | [0021](./0021-observabilidad-local-fase1.md)              | Observabilidad local Fase 1              | Aceptado | 2026-04-23 |
+| [0023](./0023-arquitectura-medallion-dbt.md)              | Arquitectura medallion y motor dbt Core v2 | Propuesto | 2026-06-08 |
