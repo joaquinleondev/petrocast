@@ -20,6 +20,14 @@ dev = [
     "schemathesis>=3.36.0",
 ]
 
+[tool.uv]
+# Security pins: force patched versions of transitive deps flagged by Trivy
+# (HIGH severity, fixes available upstream). Drop when direct deps pull these in.
+constraint-dependencies = [
+    "python-multipart>=0.0.27",  # CVE-2026-42561
+    "urllib3>=2.7.0",            # CVE-2026-44431, CVE-2026-44432
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
