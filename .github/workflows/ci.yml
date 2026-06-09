@@ -151,7 +151,26 @@ jobs:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
         run: echo "short=${SOURCE_SHA::7}" >> "$GITHUB_OUTPUT"
 
+      # Guard against the merge race: if the PR was merged/closed while this run
+      # was still in flight, skip the deploy so we don't re-create a stack that
+      # deploy-preview-cleanup has just torn down (orphan preview burning compute).
+      - name: Check PR still open
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUM: ${{ github.event.number }}
+        run: |
+          STATE=$(gh pr view "$PR_NUM" --repo "$GITHUB_REPOSITORY" --json state -q .state)
+          echo "PR #$PR_NUM state: $STATE"
+          if [[ "$STATE" == "OPEN" ]]; then
+            echo "open=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "open=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR #$PR_NUM is $STATE — skipping preview deploy to avoid orphaning a stack."
+          fi
+
       - name: Configure AWS credentials
+        if: steps.guard.outputs.open == 'true'
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
@@ -159,6 +178,7 @@ jobs:
 
       - name: Deploy via SSM
         id: ssm
+        if: steps.guard.outputs.open == 'true'
         env:
           PR_NUM: ${{ github.event.number }}
           SHORT_SHA: ${{ steps.sha.outputs.short }}
@@ -202,6 +222,7 @@ jobs:
           echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for SSM command
+        if: steps.guard.outputs.open == 'true'
         env:
           INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
           COMMAND_ID: ${{ steps.ssm.outputs.command_id }}
@@ -239,6 +260,7 @@ jobs:
           exit 1
 
       - name: Smoke test
+        if: steps.guard.outputs.open == 'true'
         env:
           PR_NUM: ${{ github.event.number }}
           DOMAIN: ${{ secrets.DOMAIN }}
@@ -262,7 +284,7 @@ jobs:
           echo "Smoke test failed after 12 attempts" >&2; exit 1
 
       - name: Comment on PR (success)
-        if: success()
+        if: success() && steps.guard.outputs.open == 'true'
         uses: actions/github-script@v9
         env:
           PR_NUM: ${{ github.event.number }}
