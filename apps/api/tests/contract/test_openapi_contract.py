@@ -19,5 +19,10 @@ def test_api_conforms_to_openapi(case):
         headers={"X-API-Key": "abcdef12345"},
         excluded_checks=[
             schemathesis.checks.positive_data_acceptance,
+            # The API now declares ApiKeyAuth (F2-01), so Schemathesis runs its
+            # ignored_auth check. That check only accepts HTTP 401 as a valid
+            # "auth required" response, but the contract (ADR-0007) mandates 403
+            # for a missing/invalid key, so it reports a false positive here.
+            schemathesis.checks.ignored_auth,
         ],
     )
