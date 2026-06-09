@@ -56,3 +56,4 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0021](./0021-observabilidad-local-fase1.md)              | Observabilidad local Fase 1              | Aceptado | 2026-04-23 |
 | [0022](./0022-gobierno-datos-linaje-datahub.md)           | Gobierno de datos y linaje con DataHub   | Propuesto | 2026-06-08 |
 | [0023](./0023-arquitectura-medallion-dbt.md)              | Arquitectura medallion y motor dbt Core v2 | Propuesto | 2026-06-08 |
+| [0024](./0024-modelo-dimensional-star-schema.md)          | Modelo dimensional gold (star schema)    | Propuesto | 2026-06-08 |
