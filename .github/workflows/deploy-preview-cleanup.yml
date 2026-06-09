@@ -10,6 +10,11 @@ jobs:
     name: teardown PR preview
     runs-on: ubuntu-latest
     environment: preview
+    # Shared group with ci.yml's deploy-preview job: closing the PR cancels any
+    # in-flight preview deploy so it can't re-create the stack after teardown.
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: true
     permissions:
       id-token: write
       contents: read
@@ -27,12 +32,15 @@ jobs:
           PR_NUM: ${{ github.event.number }}
           INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
         run: |
+          # Re-run `docker stack rm` until the stack is actually gone. A bare
+          # `... || true` reports success even if an in-flight deploy re-creates
+          # the stack moments later, leaving an orphan that burns compute.
+          STACK="pr-${PR_NUM}"
+          REMOTE="for i in \$(seq 1 12); do docker stack rm $STACK 2>/dev/null || true; sleep 5; if docker stack ls --format '{{.Name}}' | grep -qx $STACK; then echo \"$STACK still present (\$i/12)\"; else echo \"$STACK removed\"; exit 0; fi; done; echo \"$STACK still present after retries\" >&2; exit 1"
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "$(jq -n \
-              --arg cmd "docker stack rm pr-${PR_NUM} || true" \
-              '{commands: [$cmd]}')" \
+            --parameters "$(jq -n --arg cmd "$REMOTE" '{commands: [$cmd]}')" \
             --cloud-watch-output-config \
               "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/preview/deploy" \
             --query "Command.CommandId" \
