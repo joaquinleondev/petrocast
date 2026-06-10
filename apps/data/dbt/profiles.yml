@@ -1,0 +1,12 @@
+petrocast:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('PETROCAST_DW_HOST', 'localhost') }}"
+      port: "{{ env_var('PETROCAST_DW_PORT', '5432') | int }}"
+      user: "{{ env_var('PETROCAST_DW_USER', 'petrocast') }}"
+      password: "{{ env_var('PETROCAST_DW_PASSWORD', 'petrocast') }}"
+      dbname: "{{ env_var('PETROCAST_DW_DATABASE', 'petrocast') }}"
+      schema: silver
+      threads: 4

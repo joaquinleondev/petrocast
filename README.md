@@ -56,6 +56,15 @@ docker compose -f infra/compose.observability.yml up
 - Grafana: <http://localhost:3000> (sin login, dashboard cargado automáticamente)
 - Prometheus: <http://localhost:9090>
 
+### Stack de datos
+
+```bash
+docker compose -f infra/compose.data.yml up --build
+```
+
+- Dagster UI: <http://localhost:3000>
+- PostgreSQL DW: `localhost:5432` con schemas `bronze`, `silver` y `gold`
+
 ## Despliegue
 
 El pipeline CI/CD es completamente automatizado vía GitHub Actions:

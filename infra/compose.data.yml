@@ -1,0 +1,58 @@
+services:
+  data-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: petrocast
+      POSTGRES_USER: petrocast
+      POSTGRES_PASSWORD: petrocast
+    ports:
+      - "5432:5432"
+    volumes:
+      - data_postgres:/var/lib/postgresql/data
+      - ./data/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U petrocast -d petrocast"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - petrocast_data
+    restart: unless-stopped
+
+  dagster:
+    build:
+      context: ../apps/data
+      dockerfile: Dockerfile
+    image: petrocast-data:dev
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      DBT_PROFILES_DIR: /app/dbt
+      PETROCAST_DW_HOST: data-postgres
+      PETROCAST_DW_PORT: "5432"
+      PETROCAST_DW_USER: petrocast
+      PETROCAST_DW_PASSWORD: petrocast
+      PETROCAST_DW_DATABASE: petrocast
+    ports:
+      - "3000:3000"
+    volumes:
+      - dagster_home:/opt/dagster/dagster_home
+    command:
+      - sh
+      - -c
+      - |
+        printf 'telemetry:\n  enabled: false\n' > "$$DAGSTER_HOME/dagster.yaml"
+        exec dagster dev --host 0.0.0.0 --port 3000 --module-name petrocast_data.definitions
+    depends_on:
+      data-postgres:
+        condition: service_healthy
+    networks:
+      - petrocast_data
+    restart: unless-stopped
+
+volumes:
+  data_postgres:
+  dagster_home:
+
+networks:
+  petrocast_data:

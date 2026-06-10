@@ -1,0 +1,23 @@
+name: petrocast_data
+version: "0.1.0"
+config-version: 2
+
+profile: petrocast
+
+model-paths:
+  - models
+macro-paths:
+  - macros
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  petrocast_data:
+    +materialized: view
+    silver:
+      +schema: silver
+      +tags:
+        - f2_10_scaffold
