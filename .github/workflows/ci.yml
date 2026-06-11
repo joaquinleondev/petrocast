@@ -88,6 +88,8 @@ jobs:
           push: false
           load: true
           pull: true
+          build-args: |
+            APT_CACHE_BUSTER=${{ github.run_id }}
           tags: |
             ${{ steps.image.outputs.local }}
             ${{ steps.image.outputs.uri }}
