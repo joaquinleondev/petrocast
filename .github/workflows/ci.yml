@@ -273,9 +273,11 @@ jobs:
           getent hosts "$HOST" || echo "::warning::getent failed for $HOST"
           echo "Target URL: $PREVIEW_URL"
           for attempt in $(seq 1 12); do
+            set +e
             HTTP_CODE=$(curl -sS --ipv4 -o /dev/null -w '%{http_code}' \
               --max-time 10 "$PREVIEW_URL" 2>/tmp/curl.err)
             RC=$?
+            set -e
             if [[ "$HTTP_CODE" == "200" ]]; then
               echo "Smoke test passed — $PREVIEW_URL"; exit 0
             fi
