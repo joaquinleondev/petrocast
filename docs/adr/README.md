@@ -58,4 +58,6 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0023](./0023-arquitectura-medallion-dbt.md)              | Arquitectura medallion y motor dbt Core v2 | Propuesto | 2026-06-08 |
 | [0024](./0024-modelo-dimensional-star-schema.md)          | Modelo dimensional gold (star schema)    | Propuesto | 2026-06-08 |
 | [0025](./0025-calidad-datos-consecuencia.md)              | Calidad de datos y consecuencia operativa | Propuesto | 2026-06-08 |
+| [0026](./0026-tipo-carga-medallion.md)                    | Tipo de carga por capa medallion         | Propuesto | 2026-06-10 |
 | [0027](./0027-topologia-despliegue-fase2.md)              | Topología de despliegue de Fase 2        | Propuesto | 2026-06-10 |
+| [0028](./0028-orquestacion-e-ingesta-dagster-dlt.md)      | Orquestación con Dagster e ingesta con dlt | Propuesto | 2026-06-08 |
