@@ -65,6 +65,10 @@ docker compose -f infra/compose.data.yml up --build
 - Dagster UI: <http://localhost:3000>
 - PostgreSQL DW: `localhost:5432` con schemas `bronze`, `silver` y `gold`
 
+> Los puertos del host son configurables para convivir con los otros stacks
+> (Grafana también usa el 3000; el Postgres de dev, el 5432):
+> `PETROCAST_DAGSTER_PORT=3001 PETROCAST_DW_PUBLISHED_PORT=5433 docker compose -f infra/compose.data.yml up`
+
 ## Despliegue
 
 El pipeline CI/CD es completamente automatizado vía GitHub Actions:

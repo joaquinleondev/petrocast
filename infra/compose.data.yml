@@ -6,7 +6,9 @@ services:
       POSTGRES_USER: petrocast
       POSTGRES_PASSWORD: petrocast
     ports:
-      - "5432:5432"
+      # Override the host port if a local Postgres (e.g. compose.dev.yml)
+      # already publishes 5432.
+      - "${PETROCAST_DW_PUBLISHED_PORT:-5432}:5432"
     volumes:
       - data_postgres:/var/lib/postgresql/data
       - ./data/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -34,7 +36,9 @@ services:
       PETROCAST_DW_PASSWORD: petrocast
       PETROCAST_DW_DATABASE: petrocast
     ports:
-      - "3000:3000"
+      # Grafana (compose.observability.yml) also publishes 3000; override the
+      # host port to run both stacks at once.
+      - "${PETROCAST_DAGSTER_PORT:-3000}:3000"
     volumes:
       - dagster_home:/opt/dagster/dagster_home
     command:

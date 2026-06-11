@@ -1,31 +1,30 @@
-from dataclasses import dataclass
-from os import getenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class DataSettings:
-    dw_host: str = getenv("PETROCAST_DW_HOST", "localhost")
-    dw_port: int = int(getenv("PETROCAST_DW_PORT", "5432"))
-    dw_user: str = getenv("PETROCAST_DW_USER", "petrocast")
-    dw_password: str = getenv("PETROCAST_DW_PASSWORD", "petrocast")
-    dw_database: str = getenv("PETROCAST_DW_DATABASE", "petrocast")
+class DataSettings(BaseSettings):
+    """Warehouse connection settings, read from `PETROCAST_DW_*` env vars (ADR-0018)."""
+
+    model_config = SettingsConfigDict(env_prefix="PETROCAST_DW_")
+
+    host: str = "localhost"
+    port: int = 5432
+    user: str = "petrocast"
+    password: str = "petrocast"
+    database: str = "petrocast"
 
     @property
     def psycopg_dsn(self) -> str:
         return (
-            f"host={self.dw_host} "
-            f"port={self.dw_port} "
-            f"dbname={self.dw_database} "
-            f"user={self.dw_user} "
-            f"password={self.dw_password}"
+            f"host={self.host} "
+            f"port={self.port} "
+            f"dbname={self.database} "
+            f"user={self.user} "
+            f"password={self.password}"
         )
 
     @property
     def dlt_destination_url(self) -> str:
-        return (
-            f"postgresql://{self.dw_user}:{self.dw_password}"
-            f"@{self.dw_host}:{self.dw_port}/{self.dw_database}"
-        )
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
 
 
 settings = DataSettings()

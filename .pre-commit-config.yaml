@@ -14,20 +14,29 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
-        files: ^apps/api/
+        files: ^apps/(api|data)/
       - id: ruff-format
-        files: ^apps/api/
+        files: ^apps/(api|data)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0
     hooks:
       - id: mypy
+        name: mypy (apps/api)
         files: ^apps/api/src/
         args: [--config-file=apps/api/pyproject.toml]
         additional_dependencies:
           - pydantic>=2.0
           - pydantic-settings>=2.0
           - fastapi>=0.136.0
+      - id: mypy
+        name: mypy (apps/data)
+        files: ^apps/data/src/
+        args: [--config-file=apps/data/pyproject.toml]
+        additional_dependencies:
+          - dagster>=1.12.0
+          - psycopg>=3.2.0
+          - pydantic-settings>=2.0
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.14.0

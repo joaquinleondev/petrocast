@@ -13,6 +13,7 @@ dependencies = [
     "dbt-postgres>=1.10.0,<2.0.0",
     "dlt[postgres]>=1.17.0",
     "psycopg[binary]>=3.2.0",
+    "pydantic-settings>=2.0.0",
 ]
 
 [dependency-groups]
@@ -40,3 +41,9 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["dagster_dbt.*", "dagster_dlt.*", "dlt.*"]
 ignore_missing_imports = true
+
+# The dbt/dlt decorators come from the untyped modules above; keep strict mode
+# for everything else in these files.
+[[tool.mypy.overrides]]
+module = ["petrocast_data.assets.dbt", "petrocast_data.assets.dlt"]
+disallow_untyped_decorators = false

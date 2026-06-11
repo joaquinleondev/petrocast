@@ -20,6 +20,15 @@ Servicios:
 - Dagster UI: <http://localhost:3000>
 - PostgreSQL: `localhost:5432`
 
+Los puertos publicados en el host son configurables para convivir con los
+otros stacks del repo (Grafana también usa el 3000; el Postgres de
+`compose.dev.yml`, el 5432):
+
+```bash
+PETROCAST_DAGSTER_PORT=3001 PETROCAST_DW_PUBLISHED_PORT=5433 \
+  docker compose -f infra/compose.data.yml up
+```
+
 ## Smoke path
 
 En Dagster, materializá estos assets:
