@@ -95,9 +95,12 @@ jobs:
         uses: actions/github-script@v9
         env:
           PR_NUM: ${{ github.event.number }}
+          # context.job in github-script is the job id (a string), not an object
+          # with a status — read the real outcome from the workflow expression.
+          JOB_STATUS: ${{ job.status }}
         with:
           script: |
-            const result = context.job.status === 'success' ? 'torn down' : 'teardown failed (manual cleanup may be needed)';
+            const result = process.env.JOB_STATUS === 'success' ? 'torn down' : 'teardown failed (manual cleanup may be needed)';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
