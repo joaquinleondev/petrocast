@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev
 # ── runtime: imagen mínima, sin build deps, usuario no-root ──────────────────
 FROM python:3.12-slim-trixie AS runtime
 
+ARG APT_CACHE_BUSTER=local
 ARG BUILD_VERSION=dev
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED=unknown
@@ -29,6 +30,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update && \
+    echo "apt cache buster: ${APT_CACHE_BUSTER}" >/dev/null && \
     apt-get upgrade -y --no-install-recommends && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir --upgrade "pip>=26.0" && \
