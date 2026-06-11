@@ -1,4 +1,4 @@
-# ADR-0023: Orquestación con Dagster e ingesta con dlt
+# ADR-0028: Orquestación con Dagster e ingesta con dlt
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-06-08
