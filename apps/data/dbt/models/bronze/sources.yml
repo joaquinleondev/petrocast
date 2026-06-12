@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Raw tables loaded by dlt into the bronze schema.
+    schema: bronze
+    tables:
+      - name: smoke_events
+        description: F2-10 smoke table loaded by the Dagster/dlt scaffold asset.

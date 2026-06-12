@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: smoke_events
+    description: Typed smoke model proving dbt can read bronze and write silver.
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: well_id
+        tests:
+          - not_null
+      - name: production_month
+        tests:
+          - not_null

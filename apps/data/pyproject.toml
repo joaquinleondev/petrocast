@@ -1,0 +1,49 @@
+[project]
+name = "petrocast-data"
+version = "0.1.0"
+description = "Dagster, dlt and dbt scaffold for Petrocast Phase 2 data pipeline."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dagster>=1.12.0",
+    "dagster-dbt>=0.28.0",
+    "dagster-dlt>=0.28.0",
+    "dagster-webserver>=1.12.0",
+    "dbt-core>=1.10.0,<2.0.0",
+    "dbt-postgres>=1.10.0,<2.0.0",
+    "dlt[postgres]>=1.17.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7.0",
+    "mypy>=1.11.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["dagster_dbt.*", "dagster_dlt.*", "dlt.*"]
+ignore_missing_imports = true
+
+# The dbt/dlt decorators come from the untyped modules above; keep strict mode
+# for everything else in these files.
+[[tool.mypy.overrides]]
+module = ["petrocast_data.assets.dbt", "petrocast_data.assets.dlt"]
+disallow_untyped_decorators = false
