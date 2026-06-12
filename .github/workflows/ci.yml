@@ -42,9 +42,92 @@ jobs:
           name: coverage
           path: apps/api/coverage.xml
 
+  data-pipeline:
+    name: data pipeline checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: petrocast
+          POSTGRES_USER: petrocast
+          POSTGRES_PASSWORD: petrocast
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U petrocast -d petrocast"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: apps/data
+    env:
+      PETROCAST_DW_HOST: localhost
+      PETROCAST_DW_PORT: "5432"
+      PETROCAST_DW_USER: petrocast
+      PETROCAST_DW_PASSWORD: petrocast
+      PETROCAST_DW_DATABASE: petrocast
+      PETROCAST_SOURCE_PRODUCTION_URL: https://example.invalid/production.csv
+      PETROCAST_SOURCE_WELLS_URL: https://example.invalid/wells.csv
+      DBT_PROFILES_DIR: ${{ github.workspace }}/apps/data/dbt
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/data/uv.lock
+      - name: Wait for Postgres
+        run: |
+          for attempt in {1..30}; do
+            if docker exec "${{ job.services.postgres.id }}" pg_isready \
+              -h localhost \
+              -p "$PETROCAST_DW_PORT" \
+              -U "$PETROCAST_DW_USER" \
+              -d "$PETROCAST_DW_DATABASE"; then
+              exit 0
+            fi
+            echo "Waiting for Postgres ($attempt/30)"
+            sleep 2
+          done
+          docker logs "${{ job.services.postgres.id }}"
+          exit 1
+      - name: Install deps
+        run: uv sync --frozen
+      - name: Ensure medallion schemas
+        run: |
+          uv run python - <<'PY'
+          import os
+
+          import psycopg
+          from psycopg import sql
+
+          with psycopg.connect(
+              host=os.environ["PETROCAST_DW_HOST"],
+              port=os.environ["PETROCAST_DW_PORT"],
+              dbname=os.environ["PETROCAST_DW_DATABASE"],
+              user=os.environ["PETROCAST_DW_USER"],
+              password=os.environ["PETROCAST_DW_PASSWORD"],
+              autocommit=True,
+          ) as connection:
+              with connection.cursor() as cursor:
+                  for schema_name in ("bronze", "silver", "gold"):
+                      cursor.execute(
+                          sql.SQL("create schema if not exists {}").format(
+                              sql.Identifier(schema_name)
+                          )
+                      )
+          PY
+      - name: Parse dbt project
+        run: uv run dbt parse --project-dir dbt --profiles-dir dbt
+      - name: Materialize Dagster assets
+        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "*"
+      - name: Build dbt scaffold
+        run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:f2_10_scaffold
+
   build:
     name: build & scan
-    needs: [lint, test]
+    needs: [lint, test, data-pipeline]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
