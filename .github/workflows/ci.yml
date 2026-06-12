@@ -71,6 +71,7 @@ jobs:
       PETROCAST_SOURCE_PRODUCTION_URL: https://example.invalid/production.csv
       PETROCAST_SOURCE_WELLS_URL: https://example.invalid/wells.csv
       DBT_PROFILES_DIR: ${{ github.workspace }}/apps/data/dbt
+      PYTHONPATH: ${{ github.workspace }}/apps/data/src
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.1.0
