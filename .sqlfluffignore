@@ -1,0 +1,6 @@
+# Macros are pure Jinja templating logic, not SQL statements — linting them
+# as SELECTs produces false positives (indent rules vs whitespace control).
+apps/data/dbt/macros/
+# Build artifacts
+apps/data/dbt/target/
+apps/data/dbt/dbt_packages/

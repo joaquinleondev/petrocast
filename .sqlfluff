@@ -1,0 +1,30 @@
+[sqlfluff]
+dialect = postgres
+templater = jinja
+sql_file_exts = .sql
+max_line_length = 120
+
+# Use the jinja templater (not dbt) so linting needs no live database.
+# apply_dbt_builtins stubs ref/source/config/var/is_incremental, and
+# load_macros_from_path makes the project's own macros resolvable.
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+load_macros_from_path = apps/data/dbt/macros
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.types]
+capitalisation_policy = lower
+
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.column]
+aliasing = explicit
