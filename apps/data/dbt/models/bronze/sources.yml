@@ -7,3 +7,7 @@ sources:
     tables:
       - name: smoke_events
         description: F2-10 smoke table loaded by the Dagster/dlt scaffold asset.
+      - name: production_by_well
+        description: Raw monthly production-by-well snapshot loaded from datos.gob.ar.
+      - name: wells_registry
+        description: Raw complementary wells registry snapshot loaded from datos.gob.ar.
