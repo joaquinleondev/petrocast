@@ -61,3 +61,4 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0026](./0026-tipo-carga-medallion.md)                    | Tipo de carga por capa medallion         | Propuesto | 2026-06-10 |
 | [0027](./0027-topologia-despliegue-fase2.md)              | Topología de despliegue de Fase 2        | Propuesto | 2026-06-10 |
 | [0028](./0028-orquestacion-e-ingesta-dagster-dlt.md)      | Orquestación con Dagster e ingesta con dlt | Propuesto | 2026-06-08 |
+| [0029](./0029-plataforma-bi-metabase.md)                  | Plataforma de BI con Metabase OSS        | Propuesto | 2026-06-12 |
