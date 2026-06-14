@@ -5,7 +5,7 @@ import dlt
 from dagster import AssetExecutionContext
 from dagster_dlt import DagsterDltResource, dlt_assets
 
-from petrocast_data.settings import settings
+from petrocast_data.settings import get_settings
 
 
 @dlt.source(name="petrocast_smoke")
@@ -25,6 +25,7 @@ def petrocast_smoke_source() -> object:
 
 
 def petrocast_smoke_pipeline() -> dlt.Pipeline:
+    settings = get_settings()
     return dlt.pipeline(
         pipeline_name="petrocast_smoke",
         destination=dlt.destinations.postgres(settings.dlt_destination_url),

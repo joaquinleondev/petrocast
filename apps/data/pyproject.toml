@@ -18,6 +18,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0.0",
     "ruff>=0.7.0",
     "mypy>=1.11.0",
 ]
@@ -33,10 +34,14 @@ ignore = ["S101"]
 [tool.ruff.format]
 quote-style = "double"
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 files = ["src"]
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = ["dagster_dbt.*", "dagster_dlt.*", "dlt.*"]

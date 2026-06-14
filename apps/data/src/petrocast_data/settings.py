@@ -1,30 +1,53 @@
+from functools import lru_cache
+from pathlib import Path
+from urllib.parse import quote
+
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DATA_APP_DIR = Path(__file__).resolve().parents[2]
 
 
 class DataSettings(BaseSettings):
-    """Warehouse connection settings, read from `PETROCAST_DW_*` env vars (ADR-0018)."""
+    """Data stack settings, read from env vars or `apps/data/.env` (ADR-0018)."""
 
-    model_config = SettingsConfigDict(env_prefix="PETROCAST_DW_")
+    model_config = SettingsConfigDict(
+        env_file=DATA_APP_DIR / ".env",
+        env_file_encoding="utf-8",
+        env_prefix="PETROCAST_",
+        extra="forbid",
+        case_sensitive=False,
+    )
 
-    host: str = "localhost"
-    port: int = 5432
-    user: str = "petrocast"
-    password: str = "petrocast"
-    database: str = "petrocast"
+    dw_host: str = Field(...)
+    dw_port: int = 5432
+    dw_user: str = Field(...)
+    dw_password: SecretStr = Field(...)
+    dw_database: str = Field(...)
+    source_production_url: str = Field(...)
+    source_wells_url: str = Field(...)
+    notification_webhook_url: str | None = None
 
     @property
     def psycopg_dsn(self) -> str:
+        password = self.dw_password.get_secret_value()
         return (
-            f"host={self.host} "
-            f"port={self.port} "
-            f"dbname={self.database} "
-            f"user={self.user} "
-            f"password={self.password}"
+            f"host={self.dw_host} "
+            f"port={self.dw_port} "
+            f"dbname={self.dw_database} "
+            f"user={self.dw_user} "
+            f"password={password}"
         )
 
     @property
     def dlt_destination_url(self) -> str:
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+        password = quote(self.dw_password.get_secret_value(), safe="")
+        return (
+            f"postgresql://{self.dw_user}:{password}"
+            f"@{self.dw_host}:{self.dw_port}/{self.dw_database}"
+        )
 
 
-settings = DataSettings()
+@lru_cache
+def get_settings() -> DataSettings:
+    return DataSettings()

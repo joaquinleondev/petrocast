@@ -2,9 +2,9 @@ services:
   data-postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: petrocast
-      POSTGRES_USER: petrocast
-      POSTGRES_PASSWORD: petrocast
+      POSTGRES_DB: ${PETROCAST_DW_DATABASE:?Set PETROCAST_DW_DATABASE in apps/data/.env}
+      POSTGRES_USER: ${PETROCAST_DW_USER:?Set PETROCAST_DW_USER in apps/data/.env}
+      POSTGRES_PASSWORD: ${PETROCAST_DW_PASSWORD:?Set PETROCAST_DW_PASSWORD in apps/data/.env}
     ports:
       # Override the host port if a local Postgres (e.g. compose.dev.yml)
       # already publishes 5432.
@@ -13,7 +13,7 @@ services:
       - data_postgres:/var/lib/postgresql/data
       - ./data/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U petrocast -d petrocast"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,9 +32,12 @@ services:
       DBT_PROFILES_DIR: /app/dbt
       PETROCAST_DW_HOST: data-postgres
       PETROCAST_DW_PORT: "5432"
-      PETROCAST_DW_USER: petrocast
-      PETROCAST_DW_PASSWORD: petrocast
-      PETROCAST_DW_DATABASE: petrocast
+      PETROCAST_DW_USER: ${PETROCAST_DW_USER:?Set PETROCAST_DW_USER in apps/data/.env}
+      PETROCAST_DW_PASSWORD: ${PETROCAST_DW_PASSWORD:?Set PETROCAST_DW_PASSWORD in apps/data/.env}
+      PETROCAST_DW_DATABASE: ${PETROCAST_DW_DATABASE:?Set PETROCAST_DW_DATABASE in apps/data/.env}
+      PETROCAST_SOURCE_PRODUCTION_URL: ${PETROCAST_SOURCE_PRODUCTION_URL:?Set PETROCAST_SOURCE_PRODUCTION_URL in apps/data/.env}
+      PETROCAST_SOURCE_WELLS_URL: ${PETROCAST_SOURCE_WELLS_URL:?Set PETROCAST_SOURCE_WELLS_URL in apps/data/.env}
+      PETROCAST_NOTIFICATION_WEBHOOK_URL: ${PETROCAST_NOTIFICATION_WEBHOOK_URL:-}
     ports:
       # Grafana (compose.observability.yml) also publishes 3000; override the
       # host port to run both stacks at once.

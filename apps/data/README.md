@@ -12,7 +12,8 @@ Scaffold de Fase 2 para el pipeline de datos:
 Desde la raíz del repo:
 
 ```bash
-docker compose -f infra/compose.data.yml up --build
+cp apps/data/.env.example apps/data/.env
+docker compose --env-file apps/data/.env -f infra/compose.data.yml up --build
 ```
 
 Servicios:
@@ -26,7 +27,32 @@ otros stacks del repo (Grafana también usa el 3000; el Postgres de
 
 ```bash
 PETROCAST_DAGSTER_PORT=3001 PETROCAST_DW_PUBLISHED_PORT=5433 \
-  docker compose -f infra/compose.data.yml up
+  docker compose --env-file apps/data/.env -f infra/compose.data.yml up
+```
+
+## Configuración
+
+El stack de datos lee su configuración desde variables de entorno, alineado con
+ADR-0018. El archivo versionado `apps/data/.env.example` documenta todas las
+variables esperadas; los secretos reales deben vivir fuera del repo, en
+`apps/data/.env` local o en GitHub Secrets para ambientes remotos.
+
+Variables principales:
+
+- `PETROCAST_DW_*`: conexión al data warehouse PostgreSQL.
+- `PETROCAST_SOURCE_PRODUCTION_URL`: fuente de producción mensual por pozo.
+- `PETROCAST_SOURCE_WELLS_URL`: fuente complementaria de listado de pozos.
+- `PETROCAST_NOTIFICATION_WEBHOOK_URL`: webhook opcional para notificaciones.
+
+Dentro de Docker Compose, Dagster usa `data-postgres` como host interno del
+warehouse. Para comandos locales fuera de Compose, usá `PETROCAST_DW_HOST=localhost`
+o exportá las variables desde `apps/data/.env`.
+
+Si cambiás `PETROCAST_DW_PASSWORD` después de haber creado el volumen local de
+Postgres, recreá el volumen para que la credencial se aplique:
+
+```bash
+docker compose --env-file apps/data/.env -f infra/compose.data.yml down -v
 ```
 
 ## Smoke path
