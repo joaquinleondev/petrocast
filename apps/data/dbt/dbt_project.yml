@@ -21,3 +21,10 @@ models:
       +schema: silver
     gold:
       +schema: gold
+
+# Data quality (ADR-0025): persist failing rows so a check leaves evidence, not
+# just a runtime pass/fail. Failures land in the `<schema>_dbt_test__audit`
+# schema for the Data Owner / Data Engineer to inspect (F2-17).
+data_tests:
+  petrocast_data:
+    +store_failures: true
