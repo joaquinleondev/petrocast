@@ -146,6 +146,33 @@ uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold \
   --vars '{"min_month": "2016-01-01", "max_month": "2016-04-01"}'
 ```
 
+## Calidad de datos
+
+F2-17 agrega chequeos de calidad sobre la transición **Bronze → Silver**
+(`silver_production`), alineado con ADR-0025. Cubre cinco dimensiones:
+
+- **Schema**: `contract: enforced` valida columnas y tipos esperados en build.
+- **Completitud**: `not_null` en claves (`well_id`, `company_id`,
+  `production_month`) y `dbt_utils.not_null_proportion` (umbral) en las medidas.
+- **Unicidad**: `dbt_utils.unique_combination_of_columns` sobre
+  `(well_id, production_month)`.
+- **Validez de rangos**: `dbt_utils.accepted_range` (`oil_prod_m3`,
+  `gas_prod_mm3`, `water_prod_m3` ≥ 0; `production_month` ≥ 2006-01-01).
+- **Frescura**: `dbt_utils.recency` sobre `production_month` (severidad `warn`;
+  el bloqueo ante datos viejos se define en F2-18).
+
+Los resultados quedan **persistidos**: `store_failures: true` (en
+`dbt_project.yml`) escribe las filas que fallan en el schema `dbt_test__audit`
+(una tabla por test), no solo un pass/fail en runtime. Esa evidencia la consumen los runbooks de Data Owner y
+Data Engineer (F2-26/F2-27). La **consecuencia operativa** (bloqueo de
+promoción + notificación) se implementa en F2-18.
+
+Los tests corren con `dbt build` (incluido en CI):
+
+```bash
+uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
+```
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke

@@ -20,19 +20,106 @@ models:
       Typed, normalized monthly production by well (oil/gas/water), one row per
       well and production month. Idempotent per month via delete+insert; backfill
       a range with the min_month/max_month vars. Source: bronze.production_by_well.
+      Data-quality checks (ADR-0025) run here on the Bronze -> Silver transition,
+      across five dimensions: schema (contract), completeness, uniqueness, range
+      validity and freshness. Failing rows persist via store_failures (F2-17).
+    config:
+      # Schema dimension: enforce the expected columns and types at build time.
+      contract:
+        enforced: true
+    data_tests:
+      # Uniqueness dimension: one row per well and production month.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - well_id
+              - production_month
+      # Freshness dimension: most recent production month within 2 months. warn
+      # (not error) because the test fixtures are historical; the blocking
+      # consequence on stale data is defined in F2-18.
+      - dbt_utils.recency:
+          arguments:
+            datepart: month
+            field: production_month
+            interval: 2
+          config:
+            severity: warn
     columns:
       - name: well_id
+        data_type: text
         description: Well business identifier (idpozo).
-        tests:
+        data_tests:
           - not_null
       - name: company_id
+        data_type: text
         description: Operator/company business identifier (idempresa).
-        tests:
+        data_tests:
           - not_null
+      - name: company_name
+        data_type: text
+        description: Operator/company name (empresa).
+      - name: well_alias
+        data_type: text
+        description: Well alias (sigla).
       - name: production_month
+        data_type: date
         description: First day of the production month, derived from anio/mes.
-        tests:
+        data_tests:
           - not_null
+          # Range dimension: not older than the dataset's start.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "'2006-01-01'"
+      - name: oil_prod_m3
+        data_type: numeric
+        description: Monthly oil production in m3 (prod_pet).
+        data_tests:
+          # Completeness dimension: measures may be sparse, so use a threshold.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.9
+          # Range dimension: production cannot be negative.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: gas_prod_mm3
+        data_type: numeric
+        description: Monthly gas production in thousands of m3 (prod_gas).
+        data_tests:
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.9
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: water_prod_m3
+        data_type: numeric
+        description: Monthly water production in m3 (prod_agua).
+        data_tests:
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.9
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: resource_type
+        data_type: text
+        description: Resource type (tipo_de_recurso).
+      - name: formation
+        data_type: text
+        description: Geological formation (formacion).
+      - name: field
+        data_type: text
+        description: Field / yacimiento (areayacimiento).
+      - name: basin
+        data_type: text
+        description: Basin (cuenca).
+      - name: province
+        data_type: text
+        description: Province (provincia).
+      - name: dlt_load_id
+        data_type: text
+        description: dlt load identifier propagated from bronze.
 
   - name: silver_wells
     description: >
