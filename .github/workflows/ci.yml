@@ -68,8 +68,8 @@ jobs:
       PETROCAST_DW_USER: petrocast
       PETROCAST_DW_PASSWORD: petrocast
       PETROCAST_DW_DATABASE: petrocast
-      PETROCAST_SOURCE_PRODUCTION_URL: https://example.invalid/production.csv
-      PETROCAST_SOURCE_WELLS_URL: https://example.invalid/wells.csv
+      PETROCAST_SOURCE_PRODUCTION_URL: tests/fixtures/production_by_well.csv
+      PETROCAST_SOURCE_WELLS_URL: tests/fixtures/wells_registry.csv
       DBT_PROFILES_DIR: ${{ github.workspace }}/apps/data/dbt
       PYTHONPATH: ${{ github.workspace }}/apps/data/src
     steps:
@@ -122,7 +122,7 @@ jobs:
       - name: Parse dbt project
         run: uv run dbt parse --project-dir dbt --profiles-dir dbt
       - name: Materialize Dagster assets
-        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "*"
+        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "*" --partition 2026-05-01
       - name: Build dbt scaffold
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:f2_10_scaffold
 

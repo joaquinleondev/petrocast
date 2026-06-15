@@ -63,8 +63,23 @@ En Dagster, materializá estos assets:
 2. `petrocast_smoke`: carga una tabla de prueba con dlt en `bronze`.
 3. `smoke_events`: ejecuta dbt sobre el modelo de prueba en `silver`.
 
-Este PR sólo crea el scaffold. La ingesta real de las fuentes de datos.gob.ar se
-implementa en F2-14.
+## Bronze ingestion
+
+F2-14 suma la ingesta real de las dos fuentes oficiales de datos.gob.ar:
+
+- `production_by_well`: producción mensual por pozo no convencional.
+- `wells_registry`: listado complementario de pozos cargados por operadoras.
+
+Ambas tablas se cargan con `dlt` en el schema `bronze` usando full refresh
+(`write_disposition="replace"`), alineado con ADR-0026. Los assets están
+particionados por mes desde `2006-01-01`; la partición representa el mes
+operativo del snapshot Bronze y se puede rematerializar desde la UI de Dagster
+sin duplicar filas.
+
+Las variables `PETROCAST_SOURCE_PRODUCTION_URL` y `PETROCAST_SOURCE_WELLS_URL`
+aceptan URLs de página `datos.gob.ar/archivo/...`, URLs CSV directas o paths
+locales. En CI se usan fixtures locales para validar el camino dlt/Dagster sin
+depender de internet.
 
 ## Nota sobre dbt v2 / Fusion
 
