@@ -14,3 +14,33 @@ models:
       - name: production_month
         tests:
           - not_null
+
+  - name: silver_production
+    description: >
+      Typed, normalized monthly production by well (oil/gas/water), one row per
+      well and production month. Idempotent per month via delete+insert; backfill
+      a range with the min_month/max_month vars. Source: bronze.production_by_well.
+    columns:
+      - name: well_id
+        description: Well business identifier (idpozo).
+        tests:
+          - not_null
+      - name: company_id
+        description: Operator/company business identifier (idempresa).
+        tests:
+          - not_null
+      - name: production_month
+        description: First day of the production month, derived from anio/mes.
+        tests:
+          - not_null
+
+  - name: silver_wells
+    description: >
+      Complementary wells registry normalized to the current snapshot, one row
+      per well. Source: bronze.wells_registry.
+    columns:
+      - name: well_id
+        description: Well business identifier (idpozo).
+        tests:
+          - not_null
+          - unique
