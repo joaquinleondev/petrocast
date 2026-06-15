@@ -111,6 +111,41 @@ Sin `min_month`/`max_month` se reconstruye el snapshot completo. Desde Dagster,
 rematerializar el rango de particiones de mes ejecuta el mismo `delete+insert`
 por cada mes (el procedimiento formal de backfill se documenta en F2-23/F2-26).
 
+## Gold star schema
+
+F2-16 agrega la capa Gold con un modelo dimensional en estrella, alineado con
+ADR-0024 y ADR-0026:
+
+- `fact_production`: tabla de hechos de producción mensual, con grano de un
+  registro por pozo y mes (`well_id` × `production_month`). Mide
+  `oil_prod_m3`, `gas_prod_mm3` y `water_prod_m3`, y expone las claves foráneas
+  `well_key`, `company_key` y `date_key`.
+- `dim_well`, `dim_company`, `dim_date`: dimensiones conformadas (pozo, empresa
+  y mes). El universo de `dim_well` es la unión de los pozos de `silver_wells` y
+  `silver_production`, de modo que todo pozo del hecho tiene su fila de dimensión
+  (sin huecos de FK).
+
+Las claves subrogadas se generan con `dbt_utils.generate_surrogate_key` (hash
+determinístico) sobre las claves de negocio. La misma expresión de hash se usa
+en el hecho y en las dimensiones, así las claves foráneas resuelven los joins.
+Las dimensiones aplican **SCD Tipo 1** (overwrite): no se conserva historia.
+
+La carga es un **upsert por clave de negocio** vía dbt incremental con
+`delete+insert` (equivalente seguro en PostgreSQL a `on conflict do update`):
+reconstruye la partición correspondiente y la vuelve a insertar, por lo que
+reprocesar es idempotente y no genera duplicados.
+
+El asset de Dagster `gold_dbt_assets` está particionado por mes (desde
+`2006-01-01`, igual que Silver) y pasa la ventana de la partición a dbt como
+`min_month`/`max_month`. `fact_production` aplica ese mismo filtro de rango de
+meses, por lo que el backfill por rango funciona con el mismo mecanismo que
+Silver:
+
+```bash
+uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold \
+  --vars '{"min_month": "2016-01-01", "max_month": "2016-04-01"}'
+```
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke

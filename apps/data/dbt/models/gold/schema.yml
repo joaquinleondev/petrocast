@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: dim_company
+    description: >
+      Company dimension (SCD Type 1, one row per company). Surrogate key
+      company_key is a deterministic hash of company_id; upsert by company_key
+      via delete+insert. Source: silver_production.
+    columns:
+      - name: company_key
+        description: Surrogate key, hash of company_id.
+        tests:
+          - not_null
+          - unique
+      - name: company_id
+        description: Company business identifier (idempresa).
+        tests:
+          - not_null
+
+  - name: dim_well
+    description: >
+      Well dimension (SCD Type 1, one row per well). Surrogate key well_key is a
+      deterministic hash of well_id; upsert by well_key via delete+insert. The
+      well universe is the union of silver_wells and silver_production so every
+      fact well has a dimension row.
+    columns:
+      - name: well_key
+        description: Surrogate key, hash of well_id.
+        tests:
+          - not_null
+          - unique
+      - name: well_id
+        description: Well business identifier (idpozo).
+        tests:
+          - not_null
+
+  - name: dim_date
+    description: >
+      Date dimension at month grain (SCD Type 1, one row per month). Surrogate
+      key date_key is a deterministic hash of production_month; upsert by
+      date_key via delete+insert. Source: silver_production.
+    columns:
+      - name: date_key
+        description: Surrogate key, hash of production_month.
+        tests:
+          - not_null
+          - unique
+      - name: production_month
+        description: First day of the production month.
+        tests:
+          - not_null
+
+  - name: fact_production
+    description: >
+      Monthly production fact (one row per well and production month). Primary
+      key production_key is a deterministic hash of (well_id, production_month);
+      foreign keys well_key/company_key/date_key reuse the dimension surrogate
+      keys. Upsert by production_key via delete+insert; partitioned by month with
+      the min_month/max_month backfill vars.
+    columns:
+      - name: production_key
+        description: Surrogate primary key, hash of (well_id, production_month).
+        tests:
+          - not_null
+          - unique
+      - name: well_key
+        description: Foreign key to dim_well.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_well')
+                field: well_key
+      - name: company_key
+        description: Foreign key to dim_company.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: date_key
+        description: Foreign key to dim_date.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
