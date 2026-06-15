@@ -19,5 +19,3 @@ models:
     +materialized: view
     silver:
       +schema: silver
-      +tags:
-        - f2_10_scaffold

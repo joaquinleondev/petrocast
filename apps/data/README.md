@@ -81,6 +81,36 @@ aceptan URLs de página `datos.gob.ar/archivo/...`, URLs CSV directas o paths
 locales. En CI se usan fixtures locales para validar el camino dlt/Dagster sin
 depender de internet.
 
+## Silver transform
+
+F2-15 agrega la transformación Bronze → Silver con dbt (tipado, normalización y
+nombres en inglés), alineada con ADR-0023 y ADR-0026:
+
+- `silver_production` (incremental, `delete+insert`): producción mensual por
+  pozo, un registro por `(well_id, production_month)`. El mes se deriva de los
+  datos (`anio`/`mes`), **no** del tag de partición de Bronze. Rematerializar un
+  mes es idempotente porque el `delete+insert` reconstruye toda la partición de
+  ese `production_month`.
+- `silver_wells` (`table`): listado complementario de pozos normalizado al
+  snapshot vigente (un registro por `well_id`). Sin grano mensual.
+
+El asset de Dagster `silver_dbt_assets` está particionado por mes (desde
+`2006-01-01`) y pasa la ventana de la partición a dbt como `min_month`/`max_month`.
+
+### Backfill por rango de meses
+
+Rematerializar un rango de meses (p. ej. tras una corrección histórica en la
+fuente) es idempotente. Por CLI dbt directamente:
+
+```bash
+uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver \
+  --vars '{"min_month": "2016-01-01", "max_month": "2016-04-01"}'
+```
+
+Sin `min_month`/`max_month` se reconstruye el snapshot completo. Desde Dagster,
+rematerializar el rango de particiones de mes ejecuta el mismo `delete+insert`
+por cada mes (el procedimiento formal de backfill se documenta en F2-23/F2-26).
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke

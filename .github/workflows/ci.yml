@@ -125,6 +125,8 @@ jobs:
         run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "*" --partition 2026-05-01
       - name: Build dbt scaffold
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:f2_10_scaffold
+      - name: Build dbt silver
+        run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
 
   build:
     name: build & scan
