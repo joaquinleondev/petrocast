@@ -5,6 +5,10 @@ services:
       POSTGRES_DB: ${PETROCAST_DW_DATABASE:?Set PETROCAST_DW_DATABASE in apps/data/.env}
       POSTGRES_USER: ${PETROCAST_DW_USER:?Set PETROCAST_DW_USER in apps/data/.env}
       POSTGRES_PASSWORD: ${PETROCAST_DW_PASSWORD:?Set PETROCAST_DW_PASSWORD in apps/data/.env}
+      # Optional: when set, init script 002 creates the read-only BI role for
+      # Metabase (F2-20). Left blank by default so the core data stack does not
+      # depend on the BI feature; the init script skips role creation when empty.
+      PETROCAST_BI_DB_PASSWORD: ${PETROCAST_BI_DB_PASSWORD:-}
     ports:
       # Override the host port if a local Postgres (e.g. compose.dev.yml)
       # already publishes 5432.
@@ -57,9 +61,36 @@ services:
       - petrocast_data
     restart: unless-stopped
 
+  metabase:
+    image: metabase/metabase:v0.62.1.8
+    # Host port 3001 — avoids collision with Dagster (:3000) and Grafana (:3000)
+    ports:
+      - "${PETROCAST_METABASE_PORT:-3001}:3000"
+    environment:
+      # Metabase app DB: embedded H2 on a named volume.
+      # For production replace with MB_DB_TYPE=postgres pointing to a dedicated instance.
+      MB_DB_TYPE: h2
+      MB_DB_FILE: /metabase-data/metabase.db
+      MB_JETTY_PORT: "3000"
+    volumes:
+      - metabase_data:/metabase-data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      data-postgres:
+        condition: service_healthy
+    networks:
+      - petrocast_data
+    restart: unless-stopped
+
 volumes:
   data_postgres:
   dagster_home:
+  metabase_data:
 
 networks:
   petrocast_data:
