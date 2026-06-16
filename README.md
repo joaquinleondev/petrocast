@@ -8,6 +8,10 @@
 
 Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44OcpUzbenkfb).
 
+## Video Entrega Adenda Fase 2
+
+Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
+
 ## Equipo
 
 - Santino Domato — sdomato@udesa.edu.ar / [sdomato](https://github.com/sdomato)
