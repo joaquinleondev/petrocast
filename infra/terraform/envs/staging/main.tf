@@ -27,6 +27,14 @@ module "ec2" {
   enable_dns01_acme    = false
   artifacts_bucket_arn = local.shared.artifacts_bucket_arn
 
+  # Phase-2 data stack: bigger root for images, a persistent data volume, and
+  # read access to the data-stack secrets in SSM Parameter Store.
+  root_volume_size   = 50
+  data_volume_size   = 40
+  data_snapshot_id   = var.data_snapshot_id
+  enable_ssm_secrets = true
+  ssm_secrets_path   = "/petrocast/staging/data/*"
+
   user_data_base64 = base64encode(templatefile(
     "${path.module}/../../../scripts/bootstrap-swarm.sh",
     {
@@ -38,6 +46,7 @@ module "ec2" {
       acme_resolver      = "le"
       domain             = var.domain
       route53_zone_id    = ""
+      data_stack_enabled = "true"
     }
   ))
 }
@@ -48,4 +57,14 @@ resource "aws_route53_record" "staging" {
   type    = "A"
   ttl     = 60
   records = [module.ec2.public_ip]
+}
+
+# Subdomains for the data-stack UIs (Traefik routes by host, basic-auth + TLS).
+resource "aws_route53_record" "data_uis" {
+  for_each = toset(["api", "bi", "dagster", "datahub"])
+  zone_id  = local.shared.route53_zone_id
+  name     = "${each.value}.staging.${var.domain}"
+  type     = "A"
+  ttl      = 60
+  records  = [module.ec2.public_ip]
 }

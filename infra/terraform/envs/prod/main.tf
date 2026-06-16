@@ -38,6 +38,7 @@ module "ec2" {
       acme_resolver      = "le"
       domain             = var.domain
       route53_zone_id    = ""
+      data_stack_enabled = "false"
     }
   ))
 }

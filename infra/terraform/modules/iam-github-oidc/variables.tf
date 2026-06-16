@@ -8,6 +8,12 @@ variable "ecr_repository_arn" {
   description = "ARN of the ECR repository to grant push access"
 }
 
+variable "additional_ecr_repository_arns" {
+  type        = list(string)
+  default     = []
+  description = "Extra ECR repository ARNs to grant push/pull (e.g. petrocast/data for the Dagster image)"
+}
+
 variable "artifacts_bucket_arn" {
   type        = string
   description = "ARN of the pipeline artifacts S3 bucket"

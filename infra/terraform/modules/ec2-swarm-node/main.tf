@@ -169,6 +169,42 @@ resource "aws_iam_role_policy" "route53_acme" {
   policy = data.aws_iam_policy_document.route53_acme[0].json
 }
 
+# Optional SSM Parameter Store read for the data stack secrets (staging only)
+data "aws_iam_policy_document" "ssm_secrets_read" {
+  count = var.enable_ssm_secrets ? 1 : 0
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${var.ecr_registry_id}:parameter${var.ssm_secrets_path}",
+    ]
+  }
+
+  # Decrypt SecureString params — restricted to the SSM service via condition.
+  statement {
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${var.aws_region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "ssm_secrets_read" {
+  count  = var.enable_ssm_secrets ? 1 : 0
+  name   = "ssm-secrets-read"
+  role   = aws_iam_role.this.id
+  policy = data.aws_iam_policy_document.ssm_secrets_read[0].json
+}
+
 resource "aws_iam_instance_profile" "this" {
   name = "${var.project}-${var.name}-profile"
   role = aws_iam_role.this.name
@@ -186,7 +222,7 @@ resource "aws_instance" "this" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 20
+    volume_size           = var.root_volume_size
     delete_on_termination = true
     encrypted             = true
   }
@@ -219,4 +255,31 @@ resource "aws_eip" "this" {
 resource "aws_eip_association" "this" {
   instance_id   = aws_instance.this.id
   allocation_id = aws_eip.this.id
+}
+
+# ── Persistent data volume (data stack node only) ──────────────────────────────
+# Holds /var/lib/docker/volumes so postgres/dagster/metabase/datahub state
+# survives instance replacement. Restored from a snapshot via var.data_snapshot_id.
+resource "aws_ebs_volume" "data" {
+  count             = var.data_volume_size > 0 ? 1 : 0
+  availability_zone = aws_instance.this.availability_zone
+  size              = var.data_volume_size
+  type              = "gp3"
+  encrypted         = true
+  snapshot_id       = var.data_snapshot_id != "" ? var.data_snapshot_id : null
+
+  tags = merge({ Name = "${var.project}-${var.name}-data" }, var.tags)
+
+  # Once created, don't rebuild the volume just because data_snapshot_id drifts —
+  # a restore is a fresh create after destroy, which still honours the snapshot.
+  lifecycle {
+    ignore_changes = [snapshot_id]
+  }
+}
+
+resource "aws_volume_attachment" "data" {
+  count       = var.data_volume_size > 0 ? 1 : 0
+  device_name = "/dev/sdf" # Nitro maps this to a /dev/nvme*n1 disk
+  volume_id   = aws_ebs_volume.data[0].id
+  instance_id = aws_instance.this.id
 }

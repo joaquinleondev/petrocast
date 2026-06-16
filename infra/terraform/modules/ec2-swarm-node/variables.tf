@@ -68,6 +68,36 @@ variable "cloudwatch_log_group_arns" {
   description = "CloudWatch log group ARNs the EC2 can write to (awslogs driver)"
 }
 
+variable "root_volume_size" {
+  type        = number
+  default     = 20
+  description = "Root EBS volume size in GiB"
+}
+
+variable "data_volume_size" {
+  type        = number
+  default     = 0
+  description = "Extra persistent EBS data volume size in GiB. 0 = no data volume (preview/prod). Set >0 to attach a /var/lib/docker/volumes disk for the data stack."
+}
+
+variable "data_snapshot_id" {
+  type        = string
+  default     = ""
+  description = "EBS snapshot ID to restore the data volume from. Empty = create a blank volume (first boot)."
+}
+
+variable "enable_ssm_secrets" {
+  type        = bool
+  default     = false
+  description = "Grant the instance profile read access to SSM Parameter Store secrets under ssm_secrets_path."
+}
+
+variable "ssm_secrets_path" {
+  type        = string
+  default     = ""
+  description = "SSM Parameter Store path prefix the instance may read (e.g. /petrocast/staging/data/*). Required when enable_ssm_secrets is true."
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

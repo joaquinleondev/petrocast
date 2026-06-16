@@ -12,6 +12,14 @@ services:
       - --providers.swarm.endpoint=unix:///var/run/docker.sock
       - --providers.swarm.exposedByDefault=false
       - --providers.swarm.network=traefik-public
+      # Docker provider: discover standalone `docker compose` containers (the
+      # Phase-2 data stack) by their Traefik labels — they attach to traefik-public.
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      # File provider: dynamic config (the petrocast-auth basic-auth middleware)
+      # written by the bootstrap from SSM secrets into /etc/traefik/dynamic.
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
@@ -29,6 +37,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - acme:/acme
+      # Dynamic config (basic-auth middleware). Empty on prod (no data stack);
+      # populated by the bootstrap on staging.
+      - /opt/petrocast/traefik-dynamic:/etc/traefik/dynamic:ro
     networks:
       - traefik-public
     deploy:

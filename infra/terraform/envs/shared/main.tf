@@ -9,6 +9,12 @@ module "ecr" {
   name   = "${var.project}/mock-api"
 }
 
+# Dagster/data image for the Phase-2 data stack (built by build-data.yml).
+module "ecr_data" {
+  source = "../../modules/ecr"
+  name   = "${var.project}/data"
+}
+
 module "route53" {
   source = "../../modules/route53"
   domain = var.domain
@@ -24,12 +30,13 @@ data "aws_s3_bucket" "tf_state" {
 }
 
 module "iam_github_oidc" {
-  source               = "../../modules/iam-github-oidc"
-  github_repo          = var.github_repo
-  ecr_repository_arn   = module.ecr.repository_arn
-  artifacts_bucket_arn = module.s3_artifacts.artifacts_bucket_arn
-  reports_bucket_arn   = module.s3_artifacts.reports_bucket_arn
-  tf_state_bucket_arn  = data.aws_s3_bucket.tf_state.arn
+  source                         = "../../modules/iam-github-oidc"
+  github_repo                    = var.github_repo
+  ecr_repository_arn             = module.ecr.repository_arn
+  additional_ecr_repository_arns = [module.ecr_data.repository_arn]
+  artifacts_bucket_arn           = module.s3_artifacts.artifacts_bucket_arn
+  reports_bucket_arn             = module.s3_artifacts.reports_bucket_arn
+  tf_state_bucket_arn            = data.aws_s3_bucket.tf_state.arn
 }
 
 module "cloudwatch" {
@@ -71,4 +78,37 @@ resource "aws_s3_object" "rollback_script" {
   key    = "scripts/rollback.sh"
   source = "${path.module}/../../../scripts/rollback.sh"
   etag   = filemd5("${path.module}/../../../scripts/rollback.sh")
+}
+
+resource "aws_s3_object" "deploy_data_script" {
+  bucket = module.s3_artifacts.artifacts_bucket
+  key    = "scripts/deploy-data.sh"
+  source = "${path.module}/../../../scripts/deploy-data.sh"
+  etag   = filemd5("${path.module}/../../../scripts/deploy-data.sh")
+}
+
+# Phase-2 data stack bundle — pulled to /opt/petrocast/ by the staging bootstrap.
+# Relative paths (mirrored under the "stack/" S3 prefix) so the compose bind
+# mounts (e.g. ./data/postgres/init) resolve on the host.
+locals {
+  data_stack_artifacts = [
+    "compose.data.yml",
+    "compose.datahub.yml",
+    "compose.dev.yml",
+    "compose.staging.yml",
+    "data/postgres/init/001-create-medallion-schemas.sql",
+    "data/postgres/init/002-create-bi-readonly-role.sh",
+    "metabase/provision_metabase.py",
+    "datahub/datahub.sh",
+    "datahub/recipes/dbt.yml",
+    "datahub/recipes/postgres.yml",
+  ]
+}
+
+resource "aws_s3_object" "data_stack" {
+  for_each = toset(local.data_stack_artifacts)
+  bucket   = module.s3_artifacts.artifacts_bucket
+  key      = "stack/${each.value}"
+  source   = "${path.module}/../../../${each.value}"
+  etag     = filemd5("${path.module}/../../../${each.value}")
 }
