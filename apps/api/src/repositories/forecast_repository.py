@@ -1,31 +1,62 @@
-from datetime import date, timedelta
+"""Forecast repository — reads production actuals from gold.fact_production.
 
-_BASE_PRODUCTION: dict[str, float] = {
-    "POZO-001": 150.0,
-    "POZO-002": 220.0,
-    "POZO-003": 95.0,
-}
+Mapping strategy:
+    The gold schema stores monthly production actuals. This repository returns
+    those actuals directly as ``ForecastRow`` records — each row becomes one
+    ``ForecastPoint`` with:
+        date  = gold.fact_production.production_month (ISO string YYYY-MM-DD)
+        prod  = gold.fact_production.oil_prod_m3 (float)
 
-# Exponential decline rate per day (Arps model, simplified)
-_DAILY_DECLINE = 0.002
+    Rows are filtered to the requested [date_start, date_end] window (inclusive)
+    and ordered chronologically. An empty result (unknown well or no data in the
+    requested window) signals to the service layer that the well was not found.
 
+    The returned rows are sorted by date ascending; whether they are declining
+    depends on the real data in the gold layer.
+"""
+
+from datetime import date
+from typing import Any
+
+import psycopg
+from psycopg.rows import dict_row
 
 ForecastRow = dict[str, str | float]
 
 
-def generate(id_well: str, date_start: date, date_end: date) -> list[ForecastRow]:
-    base = _BASE_PRODUCTION.get(id_well)
-    if base is None:
-        return []
+def generate(
+    conn: psycopg.Connection[Any],
+    id_well: str,
+    date_start: date,
+    date_end: date,
+) -> list[ForecastRow]:
+    """Return production actuals for *id_well* in [date_start, date_end].
 
-    result: list[ForecastRow] = []
-    current = date_start
-    day = 0
+    Returns an empty list when the well does not exist or has no production
+    data in the requested window.
+    """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                production_month::date AS production_month,
+                COALESCE(oil_prod_m3, 0.0) AS oil_prod_m3
+            FROM gold.fact_production
+            WHERE well_id = %s
+              AND production_month >= %s
+              AND production_month <= %s
+            ORDER BY production_month ASC
+            """,
+            (id_well, date_start, date_end),
+        )
+        rows = cur.fetchall()
 
-    while current <= date_end:
-        prod = round(base * ((1 - _DAILY_DECLINE) ** day), 2)
-        result.append({"date": current.isoformat(), "prod": prod})
-        current += timedelta(days=1)
-        day += 1
-
-    return result
+    return [
+        {
+            "date": row["production_month"].isoformat()
+            if hasattr(row["production_month"], "isoformat")
+            else str(row["production_month"]),
+            "prod": float(row["oil_prod_m3"]),
+        }
+        for row in rows
+    ]
