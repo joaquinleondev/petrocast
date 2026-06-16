@@ -1,0 +1,44 @@
+# Receta de ingesta DataHub — fuente: dbt (linaje de modelos F2-19)
+#
+# REQUISITO (F2-19): los artefactos dbt deben existir antes de correr esta receta.
+# Generarlos desde apps/data/:
+#   uv run dbt docs generate --project-dir dbt --profiles-dir dbt
+#
+# Ejecutar desde la raíz del repo:
+#   uvx --from 'acryl-datahub[dbt,datahub-rest]' \
+#       datahub ingest -c infra/datahub/recipes/dbt.yml
+#
+# Variables de entorno soportadas:
+#   PETROCAST_DATAHUB_GMS  — URL del GMS (default http://localhost:8080)
+
+source:
+  type: dbt
+  config:
+    # Artefactos generados por `dbt docs generate` (F2-19).
+    # Rutas relativas a la raíz del repo (cwd al correr el CLI).
+    manifest_path: apps/data/dbt/target/manifest.json
+    catalog_path: apps/data/dbt/target/catalog.json
+
+    # La plataforma subyacente donde residen las tablas físicas.
+    target_platform: postgres
+
+    # Incluir resultados de los tests dbt como assertions en DataHub
+    run_results_paths:
+      - apps/data/dbt/target/run_results.json
+
+    # Entorno usado al construir las URNs de los datasets (default: PROD)
+    env: PROD
+
+    stateful_ingestion:
+      enabled: true
+      remove_stale_metadata: true
+      state_provider:
+        type: datahub
+        config:
+          datahub_api:
+            server: "${PETROCAST_DATAHUB_GMS:-http://localhost:8080}"
+
+sink:
+  type: datahub-rest
+  config:
+    server: "${PETROCAST_DATAHUB_GMS:-http://localhost:8080}"
