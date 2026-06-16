@@ -1,0 +1,90 @@
+# Staging override for the Phase-2 data stack on the staging EC2 node.
+#
+# Applied LAST, on top of the base compose files, as a single project:
+#   docker compose -p petrocast \
+#     -f compose.data.yml -f compose.datahub.yml -f compose.dev.yml \
+#     -f compose.staging.yml --env-file /var/lib/petrocast/stack.env up -d --no-build
+#
+# What it changes vs. local dev:
+#   - Points the two built services at their ECR images (the host never builds;
+#     `--no-build` + a prior `docker pull` use the pulled image).
+#   - Attaches the four user-facing services to the attachable swarm overlay
+#     `traefik-public` and adds Traefik routers (TLS via the Let's Encrypt `le`
+#     resolver + the `petrocast-auth` basic-auth middleware from the file
+#     provider). Hostnames: api./bi./dagster./datahub.staging.${PETROCAST_DOMAIN}.
+#
+# Host ports from the base files are kept: the security group only opens 80/443
+# to the world, so the published ports are reachable only on the box itself —
+# handy for the Metabase provisioning + DataHub ingestion that run on the host.
+#
+# Persistence is handled OUTSIDE compose: the EBS data volume is mounted at
+# /var/lib/docker/volumes on the host, so every named volume (postgres,
+# dagster_home, metabase_data, datahub_*) lives on the snapshotted disk.
+#
+# Required env (from /var/lib/petrocast/stack.env, materialized from SSM):
+#   PETROCAST_ECR_REGISTRY, PETROCAST_DOMAIN, and all PETROCAST_DW_*/source/BI vars.
+# The external networks petrocast and petrocast_data are pre-created by the
+# bootstrap; traefik-public is the overlay created at swarm init.
+
+services:
+  dagster:
+    image: ${PETROCAST_ECR_REGISTRY}/petrocast/data:staging-latest
+    networks:
+      - petrocast_data
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.dagster.rule=Host(`dagster.staging.${PETROCAST_DOMAIN}`)"
+      - "traefik.http.routers.dagster.entrypoints=websecure"
+      - "traefik.http.routers.dagster.tls.certresolver=le"
+      - "traefik.http.routers.dagster.middlewares=petrocast-auth@file"
+      - "traefik.http.services.dagster.loadbalancer.server.port=3000"
+
+  metabase:
+    networks:
+      - petrocast_data
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.metabase.rule=Host(`bi.staging.${PETROCAST_DOMAIN}`)"
+      - "traefik.http.routers.metabase.entrypoints=websecure"
+      - "traefik.http.routers.metabase.tls.certresolver=le"
+      - "traefik.http.routers.metabase.middlewares=petrocast-auth@file"
+      - "traefik.http.services.metabase.loadbalancer.server.port=3000"
+
+  datahub-frontend:
+    networks:
+      - default
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.datahub.rule=Host(`datahub.staging.${PETROCAST_DOMAIN}`)"
+      - "traefik.http.routers.datahub.entrypoints=websecure"
+      - "traefik.http.routers.datahub.tls.certresolver=le"
+      - "traefik.http.routers.datahub.middlewares=petrocast-auth@file"
+      - "traefik.http.services.datahub.loadbalancer.server.port=9002"
+
+  api:
+    image: ${PETROCAST_ECR_REGISTRY}/petrocast/mock-api:staging-latest
+    networks:
+      - petrocast
+      - petrocast_data
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.api-gold.rule=Host(`api.staging.${PETROCAST_DOMAIN}`)"
+      - "traefik.http.routers.api-gold.entrypoints=websecure"
+      - "traefik.http.routers.api-gold.tls.certresolver=le"
+      - "traefik.http.services.api-gold.loadbalancer.server.port=8000"
+
+networks:
+  petrocast_data:
+    external: true
+  petrocast:
+    external: true
+  traefik-public:
+    external: true

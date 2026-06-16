@@ -62,7 +62,7 @@ data "aws_iam_policy_document" "ci_permissions" {
       "ecr:DescribeRepositories",
       "ecr:ListImages",
     ]
-    resources = [var.ecr_repository_arn]
+    resources = concat([var.ecr_repository_arn], var.additional_ecr_repository_arns)
   }
 
   # S3 artifacts and reports
@@ -206,7 +206,7 @@ data "aws_iam_policy_document" "deploy_permissions" {
       "ecr:ListImages",
       "ecr:BatchDeleteImage",
     ]
-    resources = [var.ecr_repository_arn]
+    resources = concat([var.ecr_repository_arn], var.additional_ecr_repository_arns)
   }
 }
 

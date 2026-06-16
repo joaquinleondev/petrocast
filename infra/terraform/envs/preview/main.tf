@@ -39,6 +39,7 @@ module "ec2" {
       acme_resolver      = "le-dns"
       domain             = var.domain
       route53_zone_id    = local.shared.route53_zone_id
+      data_stack_enabled = "false"
     }
   ))
 }

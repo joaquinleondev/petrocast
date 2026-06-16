@@ -15,7 +15,13 @@ variable "domain" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.small"
+  default = "t3.xlarge" # runs the API + full Phase-2 data stack (incl. DataHub)
+}
+
+variable "data_snapshot_id" {
+  type        = string
+  default     = ""
+  description = "EBS snapshot ID to restore the data volume from when re-creating staging. Empty = blank volume."
 }
 
 variable "traefik_acme_email" {
