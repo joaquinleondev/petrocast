@@ -19,8 +19,14 @@ models:
     +materialized: view
     silver:
       +schema: silver
+      +meta:
+        dagster:
+          group: silver
     gold:
       +schema: gold
+      +meta:
+        dagster:
+          group: gold
 
 # Data quality (ADR-0025): persist failing rows so a check leaves evidence, not
 # just a runtime pass/fail. Failures land in the `<schema>_dbt_test__audit`
