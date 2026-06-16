@@ -147,6 +147,23 @@ uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold \
   --vars '{"min_month": "2016-01-01", "max_month": "2016-04-01"}'
 ```
 
+### Semantic layer liviano (vistas)
+
+F2-28 (bonus) agrega vistas SQL en `gold` que **centralizan métricas** para BI,
+sin dbt Semantic Layer formal (ver ADR-0029). Se materializan como `view` (tag
+`gold`, se construyen y testean con el resto del Gold):
+
+- `gold.v_monthly_production_by_well`: producción mensual por pozo, ya
+  desnormalizada con atributos de pozo/empresa/período — lista para el Query
+  Builder de Metabase sin re-armar los joins fact→dim.
+- `gold.v_top_wells_by_volume`: totales de producción por pozo, rankeados por
+  petróleo total (`oil_volume_rank`); gas y agua se exponen aparte (unidades
+  distintas, no se suman).
+
+Son **consumibles desde Metabase**: el rol read-only `petrocast_bi` lee todo
+`gold` (incluye vistas) por `GRANT SELECT ON ALL TABLES` + `ALTER DEFAULT
+PRIVILEGES`, así que aparecen automáticamente al sincronizar la base.
+
 ## Calidad de datos
 
 F2-17 agrega chequeos de calidad sobre la transición **Bronze → Silver**
