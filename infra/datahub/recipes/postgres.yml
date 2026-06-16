@@ -20,6 +20,9 @@
 #     hay que correlacionar con los logs de Dagster (F2-15/F2-16) o configurar
 #     un Dataset Assertion de freshness en DataHub.
 
+# Required when stateful_ingestion is enabled (stable run identity).
+pipeline_name: petrocast_postgres
+
 source:
   type: postgres
   config:
