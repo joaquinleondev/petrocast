@@ -13,6 +13,7 @@ COPY src ./src
 COPY dbt ./dbt
 
 RUN uv sync --frozen --no-dev
+RUN DBT_PROFILES_DIR=/app/dbt /app/.venv/bin/dbt deps --project-dir /app/dbt --profiles-dir /app/dbt
 RUN DBT_PROFILES_DIR=/app/dbt /app/.venv/bin/dbt parse --project-dir /app/dbt --profiles-dir /app/dbt
 
 FROM python:3.12-slim-trixie AS runtime
