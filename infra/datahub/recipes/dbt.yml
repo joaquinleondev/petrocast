@@ -11,6 +11,9 @@
 # Variables de entorno soportadas:
 #   PETROCAST_DATAHUB_GMS  — URL del GMS (default http://localhost:8080)
 
+# Required when stateful_ingestion is enabled (stable run identity).
+pipeline_name: petrocast_dbt
+
 source:
   type: dbt
   config:
