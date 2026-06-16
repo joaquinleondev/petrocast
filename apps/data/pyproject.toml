@@ -47,8 +47,8 @@ plugins = ["pydantic.mypy"]
 module = ["dagster_dbt.*", "dagster_dlt.*", "dlt.*"]
 ignore_missing_imports = true
 
-# The dbt/dlt decorators come from the untyped modules above; keep strict mode
-# for everything else in these files.
+# The dbt/dlt/sensor decorators come from the untyped modules above; keep strict
+# mode for everything else in these files.
 [[tool.mypy.overrides]]
-module = ["petrocast_data.assets.dbt", "petrocast_data.assets.dlt"]
+module = ["petrocast_data.assets.dbt", "petrocast_data.assets.dlt", "petrocast_data.sensors"]
 disallow_untyped_decorators = false

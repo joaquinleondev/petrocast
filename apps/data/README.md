@@ -173,6 +173,42 @@ Los tests corren con `dbt build` (incluido en CI):
 uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
 ```
 
+## Consecuencia operativa: bloqueo + notificación
+
+F2-18 le da **consecuencia** a la calidad de F2-17, alineado con ADR-0025: un
+dato malo no solo se marca, **bloquea la promoción a Gold** y **avisa**.
+
+- **Bloqueo (asset checks bloqueantes).** `dagster-dbt` expone cada test dbt de
+  `silver_production` como un *asset check* de Dagster. Los tests de integridad y
+  validez corren con la severidad por defecto de dbt (`error`), por lo que sus
+  checks son **bloqueantes** (`blocking=True`); el de frescura (`recency`) es
+  `warn`, así que avisa pero no bloquea. Cuando un check bloqueante falla, el
+  `dbt build` de Silver termina con error y el step `silver_dbt_assets` falla;
+  como Gold hace `ref()` de Silver, Dagster **no ejecuta** `gold_dbt_assets` en
+  ese run. En la UI se ve el step de Silver en rojo, el check fallido, y Gold
+  saltado (`Dependencies for step gold_dbt_assets failed ... Not executing`).
+- **Estado visible.** Los checks (pasa/falla, severidad y filas fallidas vía
+  `store_failures`) son navegables en la UI de Dagster sobre el asset
+  `silver/silver_production`.
+- **Notificación.** El sensor `quality_block_notification` (un
+  `@run_failure_sensor`) se dispara cuando un run falla; si el fallo incluye
+  checks de calidad, postea al webhook configurado en
+  `PETROCAST_NOTIFICATION_WEBHOOK_URL` (Slack/email) un payload con el run, el job
+  y la lista de checks fallidos. Si la variable está vacía (CI/local), el sensor
+  **no hace nada** en vez de fallar.
+- **Gold conserva el último valor válido.** Como Gold no se materializa ante un
+  bloqueo, sus tablas quedan **intactas** con el último snapshot válido (la carga
+  es `delete+insert` por partición y solo corre si Silver pasó). Por eso Metabase
+  (F2-20), que lee de `gold`, sigue mostrando el último Gold bueno mientras dura
+  el bloqueo, en lugar de exponer datos corruptos.
+
+Probar el camino de falla localmente (resumen; el procedimiento formal vive en
+F2-23/F2-30): cargar Bronze, materializar Silver+Gold de una partición con datos
+(p. ej. `2016-01-01`) y verificar que pasan; inyectar una violación en Bronze
+(p. ej. `update bronze.production_by_well set prod_pet = '-5.000'`), re-materializar
+el mismo run y verificar que el check `accepted_range` de `oil_prod_m3` falla y que
+`gold.fact_production` **no cambia**.
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke

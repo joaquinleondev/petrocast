@@ -123,6 +123,12 @@ jobs:
         run: uv run dbt deps --project-dir dbt
       - name: Parse dbt project
         run: uv run dbt parse --project-dir dbt --profiles-dir dbt
+      # Run the data app's Python tests (sensor + webhook resource + the blocking
+      # asset-check contract for F2-18). Placed after `dbt parse` so the manifest
+      # exists for the asset-check introspection test, and before the materialize
+      # steps so a regression fails fast.
+      - name: Run data app tests
+        run: uv run pytest -q
       # Materialize the ingestion (EL) layer in two sequential steps. The two dlt
       # pipelines (smoke and bronze) write to the same `bronze` schema, so running
       # them concurrently (the default multiprocess executor with `--select "*"`)
