@@ -258,6 +258,75 @@ El par `manifest.json` + `catalog.json` es el input para la fuente dbt de DataHu
 de ingesta en DataHub se documenta en
 [`docs/architecture/linaje.md`](../../docs/architecture/linaje.md).
 
+## BI / Metabase
+
+F2-20 agrega Metabase OSS como capa de visualización conectada al schema `gold`
+(ADR-0029). Ver runbook completo en `infra/metabase/README.md`.
+
+### Bring-up
+
+Metabase arranca con el resto del stack:
+
+```bash
+docker compose --env-file apps/data/.env -f infra/compose.data.yml up
+```
+
+UI disponible en <http://localhost:3001> (puerto configurable con
+`PETROCAST_METABASE_PORT`; el default 3001 evita la colisión con Dagster y Grafana
+en `:3000`).
+
+### Provisionar dashboards
+
+Después del primer `up`, ejecutar una vez (re-runnable sin efectos secundarios):
+
+```bash
+PETROCAST_METABASE_ADMIN_EMAIL=admin@example.com \
+PETROCAST_METABASE_ADMIN_PASSWORD=secreto \
+PETROCAST_BI_DB_PASSWORD=change-me \
+python3 infra/metabase/provision_metabase.py
+```
+
+El script:
+
+- Espera que Metabase esté healthy (`/api/health`).
+- Crea el usuario admin en el primer arranque (o hace login si ya existe).
+- Registra la conexión `gold` PostgreSQL con el usuario de solo lectura `petrocast_bi`.
+- Crea 3 preguntas SQL nativas:
+  1. **Producción por pozo/mes** — detalle por pozo y mes con filtros `{{well_name}}`
+     y `{{date_filter}}`.
+  2. **Evolución histórica mensual** — totales agregados por mes (ideal para línea
+     de tiempo).
+  3. **Top pozos por volumen** — ranking de 20 pozos por volumen de petróleo.
+- Crea el dashboard **"Producción Petrocast"** con las 3 tarjetas y los filtros
+  declarados: **Pozo**, **Fecha**, **Tipo de fluido**.
+
+> **Paso manual restante (filtros):** El mapeo de cada filtro del dashboard a la
+> variable de plantilla de cada tarjeta se debe completar en la UI de Metabase:
+> Dashboard → Editar → chip de filtro → ícono de columna conectada → seleccionar
+> la variable (`well_name`, `date_filter`). Ver detalle en `infra/metabase/README.md`.
+
+### Modelo de acceso
+
+- El usuario `petrocast_bi` tiene `SELECT` solo en el schema `gold` (no puede leer
+  `bronze` ni `silver`). Esto se establece en
+  `infra/data/postgres/init/002-create-bi-readonly-role.sh`.
+- Las tablas gold construidas por dbt **después** de la inicialización del volumen
+  también son legibles gracias a `ALTER DEFAULT PRIVILEGES`.
+- La app interna de Metabase usa una base H2 embebida en el volumen `metabase_data`.
+  Para producción, reemplazar con `MB_DB_TYPE=postgres` apuntando a una instancia
+  dedicada (ver `infra/metabase/README.md`).
+
+### Dashboards disponibles
+
+| Dashboard | Filtros disponibles |
+|---|---|
+| Producción por pozo/mes | Pozo, Fecha |
+| Evolución histórica mensual | Fecha |
+| Top pozos por volumen | Pozo |
+
+Filtro **Tipo de fluido** (petróleo / gas / agua): mapeado automáticamente por el
+script de aprovisionamiento (ver `infra/metabase/README.md`).
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke
