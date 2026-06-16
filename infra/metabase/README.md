@@ -5,6 +5,11 @@
 Metabase OSS proporciona dashboards de producción para usuarios no técnicos,
 conectado de solo lectura al schema `gold` del data warehouse.
 
+> Las variables de entorno (`PETROCAST_METABASE_*`, `PETROCAST_BI_DB_PASSWORD`)
+> se documentan en la sección **Variables de entorno** más abajo y tienen valores
+> por defecto en `infra/compose.data.yml`; no se listan en `apps/data/.env.example`
+> (ese archivo es el contrato de settings del data app / Dagster).
+
 ---
 
 ## Arquitectura
