@@ -168,10 +168,19 @@ services:
     restart: unless-stopped
 
   datahub-actions:
-    # Procesa eventos de metadatos (MAE/MCE consumers) — necesario para que el
-    # linaje y los índices de búsqueda se actualicen tras la ingesta.
-    image: acryldata/datahub-actions:v1.6.0-slim
+    # Framework de Actions: corre doc_propagation (propaga docs por el linaje) y
+    # el ingestion-executor (ejecuta recipes lanzadas desde la UI). El indexado
+    # search/grafo tras la ingesta lo hacen los consumers MAE/MCE EMBEBIDOS en
+    # gms (ver arriba), no este contenedor — así que es complementario.
+    # IMPORTANTE: imagen FULL (no `-slim`): la slim NO trae el plugin `executor`
+    # y como executor.yaml no tiene flag `enabled`, en slim crashea en loop.
+    image: acryldata/datahub-actions:v1.6.0
     environment:
+      # Los configs de las system-actions resuelven el GMS vía DATAHUB_GMS_HOST/
+      # PORT (no GMS_HOST/PORT, que solo usa el wrapper "wait-for-gms"). Sin
+      # esto apuntan a localhost:8080 → Connection refused en loop.
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: "8080"
       GMS_HOST: datahub-gms
       GMS_PORT: "8080"
       KAFKA_BOOTSTRAP_SERVER: datahub-kafka:29092
