@@ -80,6 +80,16 @@ EOF
 docker network create petrocast 2>/dev/null || true
 docker network create petrocast_data 2>/dev/null || true
 
+# ── API env file ─────────────────────────────────────────────────────────────
+# compose.dev.yml declares `env_file: ../apps/api/.env.example`, which is NOT
+# shipped to the host (only /opt/petrocast/ is). Compose refuses to start if the
+# path is missing, so materialize a minimal one (API_KEY has a default in
+# config; override via the optional SSM param `api_key`).
+API_DIR="$(dirname "$COMPOSE_DIR")/apps/api"
+APIKEY="$(get_param_opt api_key)"; [ -n "$APIKEY" ] || APIKEY="petrocast-staging"
+mkdir -p "$API_DIR"
+printf 'API_KEY=%s\n' "$APIKEY" > "$API_DIR/.env.example"
+
 # ── ECR login + pull the two built images ────────────────────────────────────
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "$ECR_REGISTRY"
@@ -88,21 +98,31 @@ docker pull "$ECR_REGISTRY/petrocast/mock-api:staging-latest"
 
 case "$ACTION" in
   up)
-    dc up -d --no-build
-    echo "[deploy-data] stack up — UIs via Traefik on *.staging.$DOMAIN"
+    # Core services must come up. DataHub is heavy and on-demand, so it is
+    # brought up best-effort — a DataHub failure must not block the core stack.
+    dc up -d --no-build data-postgres dagster metabase api
+    dc up -d --no-build datahub-mysql datahub-opensearch datahub-kafka \
+      datahub-upgrade datahub-gms datahub-frontend datahub-actions \
+      || echo "[deploy-data] WARNING: DataHub did not come up cleanly (see its logs)"
+    echo "[deploy-data] core stack up — UIs via Traefik on *.staging.$DOMAIN"
     ;;
   seed)
     # Populate gold so the API and Metabase have data. Idempotent: re-running
-    # a month range overwrites it (silver delete+insert, gold upsert).
-    RANGE="${SEED_RANGE:-2023-01-01...2023-07-01}"
+    # a month range overwrites it (silver delete+insert, gold upsert). Assumes
+    # the stack is already up (run `up` first). NOTE: bronze re-downloads the
+    # full source CSV per partition, so keep the range small.
+    RANGE="${SEED_RANGE:-2023-01-01...2023-02-01}"
     echo "[deploy-data] seeding partition range $RANGE"
-    dc up -d --no-build
-    dc exec -T dagster uv run dagster asset materialize \
+    # `dagster` lives on the container venv PATH (no `uv` in the runtime image);
+    # silver/gold go through Dagster's dbt integration (handles partitions).
+    dc exec -T dagster dagster asset materialize \
       --module-name petrocast_data.definitions \
       --select "warehouse_schemas_ready,bronze/production_by_well,bronze/wells_registry" \
       --partition-range "$RANGE"
-    dc exec -T dagster uv run dbt build \
-      --project-dir dbt --profiles-dir dbt --select tag:silver tag:gold
+    dc exec -T dagster dagster asset materialize \
+      --module-name petrocast_data.definitions \
+      --select "tag:silver,tag:gold" \
+      --partition-range "$RANGE"
     echo "[deploy-data] seed done. Next (operator): provision Metabase + DataHub ingest"
     echo "  see docs/runbooks/deploy-staging-data.md"
     ;;
