@@ -109,7 +109,8 @@ uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver \
 
 Sin `min_month`/`max_month` se reconstruye el snapshot completo. Desde Dagster,
 rematerializar el rango de particiones de mes ejecuta el mismo `delete+insert`
-por cada mes (el procedimiento formal de backfill se documenta en F2-23/F2-26).
+por cada mes. El procedimiento formal está en
+[`docs/runbooks/backfill.md`](../../docs/runbooks/backfill.md).
 
 ## Gold star schema
 
