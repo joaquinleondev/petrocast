@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # 002-create-bi-readonly-role.sh
 # Creates the read-only BI role "petrocast_bi" scoped to the gold schema only.
 # Runs automatically on first postgres volume initialisation (docker-entrypoint-initdb.d).
@@ -7,7 +7,7 @@
 #   PETROCAST_BI_DB_PASSWORD  — password for the petrocast_bi login role (required)
 #   POSTGRES_USER             — set by the postgres image (the superuser / dbt user)
 #   POSTGRES_DB               — set by the postgres image
-set -euo pipefail
+set -eu
 
 # The BI role is optional: if no password is provided, skip creation so the core
 # data stack still initialises (the role is only needed for Metabase, F2-20).
