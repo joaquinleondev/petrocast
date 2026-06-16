@@ -84,3 +84,34 @@ models:
               arguments:
                 to: ref('dim_date')
                 field: date_key
+
+  - name: v_monthly_production_by_well
+    description: >
+      Semantic-layer view (F2-28): monthly production by well, denormalized from
+      fact_production + dim_well/dim_company/dim_date for direct consumption in
+      Metabase. One row per well and production month.
+    columns:
+      - name: well_id
+        description: Well business identifier (idpozo).
+        tests:
+          - not_null
+      - name: production_month
+        description: First day of the production month.
+        tests:
+          - not_null
+
+  - name: v_top_wells_by_volume
+    description: >
+      Semantic-layer view (F2-28): lifetime production totals per well ranked by
+      total oil (oil_volume_rank). Gas and water totals exposed alongside; units
+      differ so fluids are not summed together. One row per well.
+    columns:
+      - name: well_id
+        description: Well business identifier (idpozo).
+        tests:
+          - not_null
+          - unique
+      - name: oil_volume_rank
+        description: Dense position by total oil volume (1 = highest).
+        tests:
+          - not_null
