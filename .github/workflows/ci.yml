@@ -135,18 +135,28 @@ jobs:
       # deadlocks on dlt's shared internal tables. Separate `materialize` runs are
       # distinct processes, so the pipelines run one after another. The medallion
       # transforms (silver/gold) are built and tested by the dbt steps below, after
-      # bronze is loaded, which also avoids racing the dbt sources against the dlt
-      # load (silver/gold are not yet linked to bronze in the asset graph).
+      # bronze is loaded (F2-19 connects bronze→silver→gold in the Dagster asset
+      # graph; the two sequential `materialize` calls remain to avoid the dlt deadlock).
       - name: Materialize warehouse + smoke ingestion (Dagster/dlt)
-        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "warehouse_schemas_ready,dlt_petrocast_smoke_smoke_events"
+        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "warehouse_schemas_ready,bronze/smoke_events"
       - name: Materialize bronze ingestion (Dagster/dlt)
-        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "dlt_petrocast_bronze_production_by_well,dlt_petrocast_bronze_wells_registry" --partition 2026-05-01
+        run: uv run dagster asset materialize --module-name petrocast_data.definitions --select "bronze/production_by_well,bronze/wells_registry" --partition 2026-05-01
       - name: Build dbt scaffold
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:f2_10_scaffold
       - name: Build dbt silver
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
       - name: Build dbt gold
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold
+      - name: Generate dbt docs (lineage artifacts)
+        run: uv run dbt docs generate --project-dir dbt --profiles-dir dbt
+      - name: Upload dbt lineage artifacts (for DataHub / F2-21)
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbt-lineage-artifacts
+          path: |
+            apps/data/dbt/target/manifest.json
+            apps/data/dbt/target/catalog.json
+          if-no-files-found: error
 
   build:
     name: build & scan

@@ -210,6 +210,54 @@ F2-23/F2-30): cargar Bronze, materializar Silver+Gold de una partición con dato
 el mismo run y verificar que el check `accepted_range` de `oil_prod_m3` falla y que
 `gold.fact_production` **no cambia**.
 
+## Linaje (data lineage)
+
+F2-19 conecta el grafo de assets de Dagster de punta a punta (`bronze → silver →
+gold`) y habilita la generación de artefactos de linaje para DataHub (F2-21).
+
+### Grafo de assets Dagster (bronze → silver → gold)
+
+La `BronzeDltTranslator` en `src/petrocast_data/assets/dlt.py` remapea las claves
+de los assets dlt al formato `["bronze", <tabla>]`, que coincide con la fuente dbt
+(`sources.yml`, source `bronze`). El resultado: los assets `bronze/production_by_well`,
+`bronze/wells_registry` y `bronze/smoke_events` aparecen en el grafo de Dagster como
+upstream de los modelos silver y gold; el linaje completo es navegable desde la UI de
+Dagster en <http://localhost:3000> (o el puerto configurado con `PETROCAST_DAGSTER_PORT`).
+
+### Generar artefactos de linaje dbt localmente
+
+Requiere el warehouse levantado y las capas bronze/silver/gold ya construidas
+(seguí los pasos de **Ejecutar** y **Bronze ingestion** de este README).
+
+```bash
+# desde apps/data/
+uv run dbt docs generate --project-dir dbt --profiles-dir dbt
+```
+
+Esto genera `apps/data/dbt/target/manifest.json` (grafo de modelos + SQL compilado)
+y `apps/data/dbt/target/catalog.json` (tipos de columnas desde el warehouse). El
+directorio `target/` está en `.gitignore`; los artefactos se producen, nunca se
+commitean.
+
+### Navegar el DAG de linaje dbt
+
+```bash
+# desde apps/data/
+uv run dbt docs serve --project-dir dbt --profiles-dir dbt
+```
+
+Abre el navegador en el sitio de dbt docs: un visor interactivo del DAG bronze →
+silver → gold donde podés explorar cada modelo, su SQL compilado y sus dependencias
+upstream/downstream.
+
+### Artefactos de handoff a DataHub (F2-21)
+
+El par `manifest.json` + `catalog.json` es el input para la fuente dbt de DataHub
+(recipe de ingesta). CI los genera después del build gold y los sube como artefacto
+`dbt-lineage-artifacts` (ver `.github/workflows/ci.yml`). El procedimiento completo
+de ingesta en DataHub se documenta en
+[`docs/architecture/linaje.md`](../../docs/architecture/linaje.md).
+
 ## Nota sobre dbt v2 / Fusion
 
 El proyecto queda integrado a Dagster mediante `dagster-dbt`. Para que el smoke

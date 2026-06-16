@@ -1,13 +1,33 @@
 from collections.abc import Iterator
 from datetime import date
+from typing import TYPE_CHECKING
 
 import dagster as dg
 import dlt
 from dagster import AssetExecutionContext
-from dagster_dlt import DagsterDltResource, build_dlt_asset_specs, dlt_assets
+from dagster_dlt import DagsterDltResource, DagsterDltTranslator, build_dlt_asset_specs, dlt_assets
+
+if TYPE_CHECKING:
+    from dagster_dlt.translator import DltResourceTranslatorData
 
 from petrocast_data.datos_gob_ar import read_csv_rows
 from petrocast_data.settings import get_settings
+
+
+class BronzeDltTranslator(DagsterDltTranslator):  # type: ignore[misc]  # dagster_dlt sin tipos (Any)
+    """Mapea cada recurso dlt a la AssetKey ["bronze", <tabla>] para que coincida
+    con la fuente dbt y el grafo de assets quede conectado bronze→silver→gold (F2-19)."""
+
+    def get_asset_spec(self, data: "DltResourceTranslatorData") -> dg.AssetSpec:
+        spec: dg.AssetSpec = super().get_asset_spec(data)
+        # deps=[] limpia la auto-dependencia sintética del translator por defecto
+        # (artefacto del formato de clave viejo); estos recursos leen CSV/URL externos
+        # y no tienen upstream en Dagster.
+        return spec.replace_attributes(
+            key=dg.AssetKey(["bronze", data.resource.name]),
+            deps=[],
+        )
+
 
 BRONZE_MONTHLY_PARTITIONS = dg.MonthlyPartitionsDefinition(start_date="2006-01-01")
 BRONZE_RETRY_POLICY = dg.RetryPolicy(
@@ -56,6 +76,7 @@ def petrocast_smoke_pipeline() -> dlt.Pipeline:
     dlt_pipeline=petrocast_smoke_pipeline(),
     name="petrocast_smoke",
     group_name="bronze",
+    dagster_dlt_translator=BronzeDltTranslator(),
 )
 def petrocast_smoke_dlt_assets(
     context: AssetExecutionContext,
@@ -108,6 +129,7 @@ def petrocast_bronze_pipeline() -> dlt.Pipeline:
     specs=build_dlt_asset_specs(
         dlt_source=petrocast_bronze_source(),
         dlt_pipeline=petrocast_bronze_pipeline(),
+        dagster_dlt_translator=BronzeDltTranslator(),
     ),
 )
 def petrocast_bronze_dlt_assets(
