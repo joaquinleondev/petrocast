@@ -20,6 +20,7 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44O
 - [PRD — Fase 2](docs/prd/prd-v0.2.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
+- [Modelo de datos — star schema Gold](docs/architecture/modelo-datos.md)
 - [Backlog de Fase 2](docs/backlog/issues-fase-2.md)
 - [Runbooks operativos](docs/runbooks/)
 - [Supuestos y clarificaciones](docs/supuestos-y-clarificaciones.md)
