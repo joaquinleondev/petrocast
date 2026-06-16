@@ -1,0 +1,199 @@
+# DataHub on-demand stack — levantá/bajá explícitamente (ADR-0022, F2-21).
+# NO está en el path always-on; consume ~6 contenedores / ~4 GB de RAM.
+#
+# Ciclo de vida:
+#   docker compose --env-file apps/data/.env -f infra/compose.datahub.yml up -d
+#   # ... ingestar metadatos con el CLI desde el host ...
+#   docker compose -f infra/compose.datahub.yml down
+#
+# Puertos del host configurables para evitar colisiones con los otros stacks:
+#   PETROCAST_DATAHUB_PORT      (default 9002) — UI frontend
+#   PETROCAST_DATAHUB_GMS_PORT  (default 8080) — GMS REST API (también usa el CLI)
+#
+# Versión DataHub pinneada: v1.6.0 (mayo 2026, última imagen estable en Docker Hub).
+# Fuente: https://hub.docker.com/r/acryldata/datahub-gms/tags
+# Para actualizar: cambiar DATAHUB_VERSION abajo y en los tags de imagen.
+
+services:
+
+  # ─── Infraestructura ─────────────────────────────────────────────────────────
+
+  datahub-mysql:
+    image: mysql:8.2
+    environment:
+      MYSQL_DATABASE: datahub
+      MYSQL_USER: datahub
+      MYSQL_PASSWORD: datahub
+      MYSQL_ROOT_PASSWORD: ${PETROCAST_DATAHUB_MYSQL_ROOT_PASSWORD:-datahub}
+    volumes:
+      - datahub_mysqldata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  datahub-opensearch:
+    image: opensearchproject/opensearch:2.19.3
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    volumes:
+      - datahub_osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qv '\"status\":\"red\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  datahub-kafka:
+    image: confluentinc/cp-kafka:8.0.0
+    hostname: datahub-kafka
+    environment:
+      # KRaft mode — no Zookeeper required
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@datahub-kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://datahub-kafka:29092,CONTROLLER://datahub-kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://datahub-kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 24
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+      - datahub_broker:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server datahub-kafka:29092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─── DataHub core ────────────────────────────────────────────────────────────
+
+  datahub-upgrade:
+    # One-shot init container: aplica migraciones de schema y configuración inicial.
+    image: acryldata/datahub-upgrade:v1.6.0
+    environment:
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: "jdbc:mysql://datahub-mysql:3306/datahub?verifyServerCertificate=false&useSSL=false&useUnicode=yes&characterEncoding=UTF-8"
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      EBEAN_DATASOURCE_DRIVER: com.mysql.jdbc.Driver
+      ELASTICSEARCH_HOST: datahub-opensearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_IMPLEMENTATION: opensearch
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:29092
+      SCHEMA_REGISTRY_TYPE: INTERNAL
+      SCHEMA_REGISTRY_URL: "http://datahub-gms:8080/schema-registry/api/"
+      GRAPH_SERVICE_IMPL: elasticsearch
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: "8080"
+    command: ["-u", "SystemUpdate"]
+    depends_on:
+      datahub-mysql:
+        condition: service_healthy
+      datahub-opensearch:
+        condition: service_healthy
+      datahub-kafka:
+        condition: service_healthy
+    restart: "no"
+
+  datahub-gms:
+    image: acryldata/datahub-gms:v1.6.0
+    environment:
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: "jdbc:mysql://datahub-mysql:3306/datahub?verifyServerCertificate=false&useSSL=false&useUnicode=yes&characterEncoding=UTF-8"
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      EBEAN_DATASOURCE_DRIVER: com.mysql.jdbc.Driver
+      ELASTICSEARCH_HOST: datahub-opensearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_IMPLEMENTATION: opensearch
+      ELASTICSEARCH_USE_SSL: "false"
+      GRAPH_SERVICE_IMPL: elasticsearch
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:29092
+      KAFKA_SCHEMAREGISTRY_URL: "http://datahub-gms:8080/schema-registry/api/"
+      SCHEMA_REGISTRY_TYPE: INTERNAL
+      JAVA_OPTS: "-Xms512m -Xmx1g"
+      METADATA_SERVICE_AUTH_ENABLED: "false"
+      # Tokens de firma — reemplazar por valores aleatorios en prod
+      DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${PETROCAST_DATAHUB_SIGNING_KEY:-datahub-signing-key-change-for-prod}
+      DATAHUB_TOKEN_SERVICE_SALT: ${PETROCAST_DATAHUB_SIGNING_SALT:-datahub-signing-salt-change-for-prod}
+    ports:
+      # Override PETROCAST_DATAHUB_GMS_PORT si el puerto 8080 está ocupado
+      # (p.ej. otra API local). El CLI de datahub apunta a localhost:<GMS_PORT>.
+      - "${PETROCAST_DATAHUB_GMS_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      datahub-upgrade:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  datahub-actions:
+    # Procesa eventos de metadatos (MAE/MCE consumers) — necesario para que el
+    # linaje y los índices de búsqueda se actualicen tras la ingesta.
+    image: acryldata/datahub-actions:v1.6.0-slim
+    environment:
+      GMS_HOST: datahub-gms
+      GMS_PORT: "8080"
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:29092
+      SCHEMA_REGISTRY_TYPE: INTERNAL
+      SCHEMA_REGISTRY_URL: "http://datahub-gms:8080/schema-registry/api/"
+      METADATA_SERVICE_AUTH_ENABLED: "false"
+      DATAHUB_SYSTEM_CLIENT_ID: __datahub_system
+      DATAHUB_SYSTEM_CLIENT_SECRET: JohnSnowKnowsNothing
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+    restart: unless-stopped
+
+  datahub-frontend:
+    image: acryldata/datahub-frontend-react:v1.6.0
+    environment:
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: "8080"
+      DATAHUB_SECRET: ${PETROCAST_DATAHUB_SECRET:-datahub-secret-change-for-prod}
+      DATAHUB_APP_VERSION: "v1.6.0"
+      JAVA_OPTS: "-Xms256m -Xmx512m -Dhttp.port=9002 -Dconfig.file=/datahub-frontend/conf/application.conf -Dlogback.configurationFile=/datahub-frontend/conf/logback.xml -Dlogback.debug=false -Dpidfile.path=/dev/null"
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:29092
+      DATAHUB_PLAY_MEM_BUFFER_SIZE: 10MB
+      AUTH_OIDC_ENABLED: "false"
+    ports:
+      # Override PETROCAST_DATAHUB_PORT si el puerto 9002 está ocupado.
+      # DataHub UI disponible en http://localhost:9002 (user: datahub / pass: datahub)
+      - "${PETROCAST_DATAHUB_PORT:-9002}:9002"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9002/admin >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Datos de MySQL (entidades, políticas, usuarios — metadata store de DataHub)
+  datahub_mysqldata:
+  # Índices de OpenSearch (búsqueda + grafo de linaje)
+  datahub_osdata:
+  # Datos de Kafka KRaft (cola de eventos de metadatos)
+  datahub_broker:

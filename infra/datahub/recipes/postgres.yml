@@ -1,0 +1,62 @@
+# Receta de ingesta DataHub — fuente: PostgreSQL DW (esquemas bronze/silver/gold)
+#
+# Ejecutar desde la raíz del repo:
+#   uvx --from 'acryl-datahub[postgres,datahub-rest]' \
+#       datahub ingest -c infra/datahub/recipes/postgres.yml
+#
+# Variables de entorno requeridas (o usar defaults de desarrollo):
+#   PETROCAST_DW_HOST      — host del DW (default localhost)
+#   PETROCAST_DW_PORT      — puerto del DW (default 5432)
+#   PETROCAST_DW_USER      — usuario del DW (default petrocast)
+#   PETROCAST_DW_PASSWORD  — contraseña del DW (default petrocast)
+#   PETROCAST_DATAHUB_GMS  — URL del GMS (default http://localhost:8080)
+#
+# Row counts y last-update:
+#   - profiling.enabled: true  → DataHub ejecuta COUNT(*) por tabla y almacena
+#     el row count en el perfil de cada dataset. Visible en la pestaña
+#     "Profiling" de cada tabla en la UI, bajo "Row Count".
+#   - La columna "Last Updated" en DataHub refleja cuándo se corrió la última
+#     ingesta (timestamp de la receta). Para ver la "frescura real" del dato
+#     hay que correlacionar con los logs de Dagster (F2-15/F2-16) o configurar
+#     un Dataset Assertion de freshness en DataHub.
+
+source:
+  type: postgres
+  config:
+    host_port: "${PETROCAST_DW_HOST:-localhost}:${PETROCAST_DW_PORT:-5432}"
+    database: "${PETROCAST_DW_DATABASE:-petrocast}"
+    username: "${PETROCAST_DW_USER:-petrocast}"
+    password: "${PETROCAST_DW_PASSWORD:-petrocast}"
+
+    # Ingestar los tres esquemas del medallion
+    schema_pattern:
+      allow:
+        - "^gold$"
+        - "^silver$"
+        - "^bronze$"
+
+    # Incluir vistas además de tablas base
+    include_views: true
+
+    # Profiling: captura row counts (COUNT(*) por tabla) y estadísticas
+    # de columnas. Se almacena en DataHub como "Dataset Profile".
+    # Row count visible en UI: Dataset > Profiling > Row Count.
+    profiling:
+      enabled: true
+      # Limitar el costo del profiling en tablas grandes
+      profile_table_level_only: false
+      max_number_of_fields_to_profile: 50
+
+    stateful_ingestion:
+      enabled: true
+      remove_stale_metadata: true
+      state_provider:
+        type: datahub
+        config:
+          datahub_api:
+            server: "${PETROCAST_DATAHUB_GMS:-http://localhost:8080}"
+
+sink:
+  type: datahub-rest
+  config:
+    server: "${PETROCAST_DATAHUB_GMS:-http://localhost:8080}"
