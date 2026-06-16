@@ -1,3 +1,7 @@
+# Requires the data stack to be up first:
+#   docker compose -f infra/compose.data.yml up -d
+# so that data-postgres is reachable on the petrocast_data network.
+
 services:
   api:
     build:
@@ -9,6 +13,13 @@ services:
       - "8000:8000"
     env_file:
       - ../apps/api/.env.example
+    environment:
+      # Override DW connection to reach data-postgres on its internal network.
+      PETROCAST_DW_HOST: data-postgres
+      PETROCAST_DW_PORT: "5432"
+      PETROCAST_DW_USER: ${PETROCAST_DW_USER:-petrocast}
+      PETROCAST_DW_PASSWORD: ${PETROCAST_DW_PASSWORD:-petrocast}
+      PETROCAST_DW_DATABASE: ${PETROCAST_DW_DATABASE:-petrocast}
     healthcheck:
       test:
         [
@@ -23,8 +34,13 @@ services:
       start_period: 5s
     networks:
       - petrocast
+      - petrocast_data
     restart: unless-stopped
 
 networks:
   petrocast:
+    external: true
+  # Shared network with the data stack (compose.data.yml); data-postgres
+  # is reachable as host "data-postgres" on this network.
+  petrocast_data:
     external: true

@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 
 from src.api.deps import verify_api_key
+from src.core.db import DBConn
 from src.schemas.well import WellInfo
 from src.services import well_service
 
@@ -17,7 +18,8 @@ router = APIRouter()
     responses={403: {"description": "Missing or invalid API key"}},
 )
 def get_wells(
+    conn: DBConn,
     date_query: date = Query(..., description="Fecha para la consulta (YYYY-MM-DD)"),
 ) -> list[WellInfo]:
     del date_query
-    return well_service.get_all_wells()
+    return well_service.get_all_wells(conn)
