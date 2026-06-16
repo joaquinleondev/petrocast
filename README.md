@@ -21,6 +21,7 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44O
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
 - [Backlog de Fase 2](docs/backlog/issues-fase-2.md)
+- [Runbooks operativos](docs/runbooks/)
 - [Supuestos y clarificaciones](docs/supuestos-y-clarificaciones.md)
 
 ## Estado por fase

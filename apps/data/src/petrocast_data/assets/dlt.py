@@ -15,6 +15,15 @@ BRONZE_RETRY_POLICY = dg.RetryPolicy(
     delay=30,
     backoff=dg.Backoff.EXPONENTIAL,
 )
+BRONZE_BACKFILL_POLICY = dg.BackfillPolicy.single_run()
+
+
+def _bronze_partition_key(context: AssetExecutionContext) -> str:
+    if context.has_partition_key:
+        return str(context.partition_key)
+    if context.has_partition_key_range:
+        return str(context.partition_key_range.end)
+    return date.today().replace(day=1).isoformat()
 
 
 @dlt.source(name="petrocast_smoke")
@@ -94,6 +103,7 @@ def petrocast_bronze_pipeline() -> dlt.Pipeline:
     group_name="bronze",
     can_subset=True,
     partitions_def=BRONZE_MONTHLY_PARTITIONS,
+    backfill_policy=BRONZE_BACKFILL_POLICY,
     retry_policy=BRONZE_RETRY_POLICY,
     specs=build_dlt_asset_specs(
         dlt_source=petrocast_bronze_source(),
@@ -104,8 +114,9 @@ def petrocast_bronze_dlt_assets(
     context: AssetExecutionContext,
     dlt: DagsterDltResource,
 ) -> Iterator[object]:
+    partition_key = _bronze_partition_key(context)
     yield from dlt.run(
         context=context,
-        dlt_source=petrocast_bronze_source(partition_key=context.partition_key),
+        dlt_source=petrocast_bronze_source(partition_key=partition_key),
         dlt_pipeline=petrocast_bronze_pipeline(),
     )
