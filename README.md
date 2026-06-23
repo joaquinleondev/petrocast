@@ -35,7 +35,7 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
 | Fase   | Fecha      | Estado           | Demo                               |
 | ------ | ---------- | ---------------- | ---------------------------------- |
 | Fase 1 | 2026-04-28 | ✅ Completa      | [link](https://api.petrocast.shop) |
-| Fase 2 | 2026-06-09 | 🟢 Plataforma de datos implementada | —                                  |
+| Fase 2 | 2026-06-09 | ✅ Completa      | [link](https://youtu.be/4pZgppJV6uo)                                  |
 | Fase 3 | 2026-06-30 | ⏳ Pendiente     | —                                  |
 
 ## Cómo ejecutar
