@@ -22,6 +22,20 @@ El procedimiento no cubre reprocesamientos históricos puntuales (ver
 [backfill histórico](backfill.md)) ni incidentes de calidad en datos ya
 existentes (ver [Data Owner](data-owner.md)).
 
+> **Fase 3 — perfil por defecto `core`.** El nodo de staging ya **no** corre el
+> stack completo de datos. Por defecto levanta solo el *serving set* que la API
+> pública necesita (**Postgres + API**) sobre una **t3.small**; Dagster, DataHub
+> y Metabase se corren **localmente** en las máquinas de desarrollo. El default
+> de `deploy-data.sh up` es `DATA_STACK_PROFILE=core`.
+>
+> Este runbook documenta el stack **completo**. Para reproducirlo en el cloud
+> (demo con linaje navegable, Metabase, etc.) hay que optar explícitamente por
+> el perfil `full`: aplicar Terraform con `-var "instance_type=t3.xlarge"` y
+> correr el deploy con `DATA_STACK_PROFILE=full bash /opt/petrocast/deploy-data.sh up`
+> (el `seed` también requiere `full`, porque necesita el servicio Dagster). Con
+> el perfil `core` los pasos de Metabase/DataHub (Paso 4.2–4.3) y el `seed`
+> remoto no aplican: el pipeline se materializa localmente.
+
 ## Rol, dueño y prerrequisitos
 
 - **Dueño:** Platform / Joaquin.

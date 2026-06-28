@@ -14,8 +14,11 @@ variable "domain" {
 }
 
 variable "instance_type" {
-  type    = string
-  default = "t3.xlarge" # runs the API + full Phase-2 data stack (incl. DataHub)
+  type = string
+  # Core serving set only: API + warehouse. Orchestration/catalog/BI (Dagster,
+  # DataHub, Metabase) run locally in Phase 3, so the box stays small (matches
+  # preview/prod). Bump to t3.xlarge + DATA_STACK_PROFILE=full to run it all here.
+  default = "t3.small"
 }
 
 variable "data_snapshot_id" {

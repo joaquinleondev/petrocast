@@ -59,9 +59,11 @@ resource "aws_route53_record" "staging" {
   records = [module.ec2.public_ip]
 }
 
-# Subdomains for the data-stack UIs (Traefik routes by host, basic-auth + TLS).
+# Public API subdomain (Traefik routes by host, TLS). The bi/dagster/datahub
+# UIs are not served from the cloud node in Phase 3 (they run locally), so only
+# `api` gets a record. Re-add them here if you bring up DATA_STACK_PROFILE=full.
 resource "aws_route53_record" "data_uis" {
-  for_each = toset(["api", "bi", "dagster", "datahub"])
+  for_each = toset(["api"])
   zone_id  = local.shared.route53_zone_id
   name     = "${each.value}.staging.${var.domain}"
   type     = "A"

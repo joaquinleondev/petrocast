@@ -20,6 +20,14 @@ CONF="/etc/petrocast/deploy-data.conf"
 # shellcheck disable=SC1090
 . "$CONF" # provides: AWS_REGION ECR_REGISTRY DOMAIN ENV SSM_PATH COMPOSE_DIR
 
+# Which slice of the data stack to run on the cloud node:
+#   core (default) — only what the public API needs: warehouse + API. The
+#                    orchestration/catalog/BI (Dagster, DataHub, Metabase) run
+#                    locally on dev machines, so staging stays on a small box.
+#   full           — also bring up Dagster + Metabase + DataHub (heavy; needs a
+#                    bigger instance, e.g. t3.xlarge). Required for cloud `seed`.
+DATA_STACK_PROFILE="${DATA_STACK_PROFILE:-core}"
+
 ENV_DIR="/var/lib/petrocast"
 DYNAMIC_DIR="/opt/petrocast/traefik-dynamic"
 mkdir -p "$ENV_DIR" "$DYNAMIC_DIR"
@@ -98,19 +106,34 @@ docker pull "$ECR_REGISTRY/petrocast/mock-api:staging-latest"
 
 case "$ACTION" in
   up)
-    # Core services must come up. DataHub is heavy and on-demand, so it is
-    # brought up best-effort — a DataHub failure must not block the core stack.
-    dc up -d --no-build data-postgres dagster metabase api
-    dc up -d --no-build datahub-mysql datahub-opensearch datahub-kafka \
-      datahub-upgrade datahub-gms datahub-frontend datahub-actions \
-      || echo "[deploy-data] WARNING: DataHub did not come up cleanly (see its logs)"
-    echo "[deploy-data] core stack up — UIs via Traefik on *.staging.$DOMAIN"
+    # The serving set the public API needs: the warehouse + the API itself.
+    # These must come up regardless of profile.
+    dc up -d --no-build data-postgres api
+    if [ "$DATA_STACK_PROFILE" = "full" ]; then
+      # Heavy, on-demand extras. DataHub is brought up best-effort — a DataHub
+      # failure must not block the core serving set.
+      dc up -d --no-build dagster metabase
+      dc up -d --no-build datahub-mysql datahub-opensearch datahub-kafka \
+        datahub-upgrade datahub-gms datahub-frontend datahub-actions \
+        || echo "[deploy-data] WARNING: DataHub did not come up cleanly (see its logs)"
+      echo "[deploy-data] full data stack up — UIs via Traefik on *.staging.$DOMAIN"
+    else
+      echo "[deploy-data] core serving set up (postgres + api) — profile=core."
+      echo "  Orchestration/catalog/BI run locally; use DATA_STACK_PROFILE=full to add them."
+    fi
     ;;
   seed)
     # Populate gold so the API and Metabase have data. Idempotent: re-running
     # a month range overwrites it (silver delete+insert, gold upsert). Assumes
     # the stack is already up (run `up` first). NOTE: bronze re-downloads the
     # full source CSV per partition, so keep the range small.
+    # Requires the dagster service — bring the stack up with DATA_STACK_PROFILE=full,
+    # or run the pipeline locally (the default cloud profile has no dagster).
+    if ! dc ps --status running --services 2>/dev/null | grep -qx dagster; then
+      echo "ERROR: dagster is not running (profile=core). Re-run 'up' with"
+      echo "  DATA_STACK_PROFILE=full, or seed from a local stack." >&2
+      exit 1
+    fi
     RANGE="${SEED_RANGE:-2023-01-01...2023-02-01}"
     echo "[deploy-data] seeding partition range $RANGE"
     # `dagster` lives on the container venv PATH (no `uv` in the runtime image);
