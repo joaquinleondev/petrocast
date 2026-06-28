@@ -366,8 +366,13 @@ completitud y para cumplir literalmente con lo que dice el PRD original.
   largas en datasets de pozos heterogéneos.
 - Excluir pozos con menos de 12 meses de histórico de la evaluación
   (no es posible computar Arps confiable con menos).
-- Reportar tanto MAPE como **MAE absoluto en bbl/d**: el MAPE es
-  engañoso para pozos con producción baja.
+- Reportar tanto MAPE como **MAE absoluto en m³**: el MAPE es
+  engañoso para pozos con producción baja (la fuente es métrica, no bbl/d).
+- **Métrica primaria escalada: MASE** (_Mean Absolute Scaled Error_). Escala
+  el error contra el naive in-sample → un MASE < 1 significa literalmente
+  "le ganamos a la persistencia naive" (el KPI del PRD), y a diferencia del
+  MAPE **no explota con meses en cero** (pozos shut-in). Se fija en Fase 3
+  (ADR-0030 / backlog #01).
 
 ### Asunciones
 
