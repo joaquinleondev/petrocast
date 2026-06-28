@@ -62,3 +62,5 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0027](./0027-topologia-despliegue-fase2.md)              | Topología de despliegue de Fase 2        | Propuesto | 2026-06-10 |
 | [0028](./0028-orquestacion-e-ingesta-dagster-dlt.md)      | Orquestación con Dagster e ingesta con dlt | Propuesto | 2026-06-08 |
 | [0029](./0029-plataforma-bi-metabase.md)                  | Plataforma de BI con Metabase OSS        | Propuesto | 2026-06-12 |
+| [0032](./0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry MLflow | Propuesto | 2026-06-28 |
+| [0034](./0034-serving-modelo-contrato-api.md)            | Serving embebido en FastAPI y contrato API | Propuesto | 2026-06-28 |
