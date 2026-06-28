@@ -31,7 +31,7 @@ En esta etapa se integrará un modelo predictivo al desarrollo creado anteriorme
 Además, como en las entregas anteriores, deben incluir un video de entre 5 y 10 minutos
 explicando el desarrollo de esta fase 3 incluyendo diseño de arquitectura, herramientas usadas,
 rationale de los puntos claves, explicación del valor agregado por el sistema, y otros elementos
-conceptuales relevantes asociados a lo visto en la materia.  
+conceptuales relevantes asociados a lo visto en la materia.
 
 En este caso el trabajo se entrega sin servicio live en producción. Por esto es requisito que
 demuestre en el video la demostración de la integración de los procesos de ML Eng para la API
