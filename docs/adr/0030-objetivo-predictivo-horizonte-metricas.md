@@ -28,9 +28,10 @@ La realidad del dato acota el espacio de decisión:
 - Las series tienen **meses en cero** (pozos shut-in) y colas largas: hay
   pozos maduros con 20 años de histórico y pozos nuevos con pocos meses
   (cold-start). Cualquier métrica porcentual pura (MAPE) explota con ceros.
-- El **KPI del PRD** pide reducción de error contra el baseline "mantener el
-  último datapoint" (persistencia naive); el estándar de industria para
-  declino de pozos es **Arps** (P4 de `supuestos-y-clarificaciones.md`).
+- El **KPI del PRD** pide **reducción del MAPE a corto plazo** contra el
+  baseline "mantener el último datapoint" (persistencia naive); el estándar
+  de industria para declino de pozos es **Arps** (P4 de
+  `supuestos-y-clarificaciones.md`).
 
 Además, la API de Fase 1 expone un forecast **por pozo** (`id_well`), por lo
 que el objetivo elegido debe poder servirse a través de ese contrato
@@ -111,10 +112,16 @@ pozo**, con esta especificación (contrato F):
   split temporal.
   - **MAE/RMSE en m³**: interpretables en la unidad del negocio y sin
     divisiones por cero.
-  - **MASE** (Hyndman): escala el MAE contra el naive in-sample, así que
-    **MASE < 1 significa literalmente "le ganamos a la persistencia naive"**
-    — codifica el KPI del PRD en un número — y no se indefine con meses en
-    cero, a diferencia del MAPE.
+  - **MASE** (Hyndman): escala el MAE del modelo contra un naive de
+    referencia. **Definición exacta (contrato F):** para cada pozo, MASE =
+    MAE del modelo en test (pooled sobre `h = 1…horizon`) ÷ MAE in-sample
+    del naive de un paso (promedio de `|Y_t − Y_{t−1}|` sobre el train hasta
+    `as_of_date`) — la definición estándar de Hyndman. **MASE < 1** significa
+    que el error de pronóstico es menor que la variación mes-a-mes histórica
+    del pozo, y no se indefine con meses en cero, a diferencia del MAPE.
+    Ganarle a la **persistencia naive en el horizonte pedido** (el espíritu
+    del KPI del PRD) no lo garantiza MASE < 1 por sí solo: lo impone
+    directamente el gate 2.
 - **Secundaria: MAPE-sobre-no-cero** (MAPE calculado excluyendo meses con
   producción real 0). Se reporta porque es el vocabulario del PRD y de los
   stakeholders, pero no gobierna gates por su fragilidad con valores chicos.
@@ -124,8 +131,10 @@ pozo**, con esta especificación (contrato F):
 ### Baselines y elegibilidad
 
 - **Naive (persistencia): obligatorio.** Valor futuro = último valor
-  observado antes de `as_of_date`. Es el baseline del PRD y el denominador
-  del MASE.
+  observado antes de `as_of_date`, sostenido sobre todo el horizonte. Es el
+  baseline del PRD y el comparador out-of-sample del gate 2. No es el
+  denominador del MASE (ese es el naive de un paso in-sample — ver
+  Métricas).
 - **Arps (decline curve): best-effort.** Ajuste exponencial/hiperbólico por
   pozo (`petbox-dca` o ajuste propio). Es la **comparación primaria** frente
   a stakeholders técnicos — ganarle al naive es un piso muy bajo; empatar o
@@ -142,13 +151,23 @@ pozo**, con esta especificación (contrato F):
 - **Backtesting temporal** (nunca aleatorio): entrenar con datos hasta el mes
   `M`, predecir `M+1 … M+h`, comparar contra lo observado. Splits
   train/validation/test estrictamente cronológicos (#13).
+- **Agregación (contrato F):** la evaluación de los gates es
+  **single-origin**: un único `as_of_date` de evaluación, prediciendo
+  `h = 1…horizon` desde ese origen. Las métricas por pozo se calculan
+  **pooled sobre todos los horizontes** de la ventana de test; los gates
+  agregan luego sobre los pozos elegibles (mediana en el gate 1, suma de
+  errores absolutos en el gate 2). La evaluación rolling entre distintos
+  `as_of_date` la cubre el retraining recurrente (ADR-0033), no el gate.
 - **Gates de promoción del champion** (insumo de #15/#16). Un candidato solo
   se promociona si, sobre la ventana de test del backtesting y los pozos
   elegibles:
-  1. **MASE mediana por pozo < 1.0** — le gana al naive en al menos la mitad
-     del portfolio (gate obligatorio).
-  2. **MAE agregado ≤ MAE agregado del naive** — no empeora el error total en
-     m³ (gate obligatorio).
+  1. **MASE mediana por pozo < 1.0** — en al menos la mitad del portfolio,
+     el error del modelo es menor que la variación mensual histórica del
+     pozo (gate obligatorio; definición exacta de MASE en Métricas).
+  2. **MAE agregado ≤ MAE agregado del naive** — no empeora el error total
+     en m³ contra la persistencia evaluada out-of-sample sobre la misma
+     ventana y horizontes; es el gate que codifica "ganarle al naive"
+     (gate obligatorio).
   3. **Contra Arps (best-effort, no bloqueante):** se reporta la distribución
      de MASE/MAE relativa a Arps; objetivo MVP: MAPE-no-cero ≤ Arps + 2 pp en
      el horizonte medio (alineado a la tabla de P4).
@@ -161,7 +180,7 @@ El usuario de la API (planificación/presupuesto) obtiene, para un pozo y una
 fecha de corte, la **producción esperada de los próximos `horizon` meses en
 m³** — el insumo directo de su ciclo de planning mensual/anual (P2) — con la
 garantía medible de que el modelo servido superó al proceso trivial de
-"repetir el último mes" (MASE < 1) y se compara honestamente contra el
+"repetir el último mes" (gates 1 y 2) y se compara honestamente contra el
 estándar de industria (Arps). La versión de modelo y el `as_of_date` viajan
 en la respuesta (contrato D), así que cada número es trazable a un run
 reproducible.
@@ -175,8 +194,9 @@ reproducible.
 - A3 resuelta: `well_id = idpozo` (texto), alineado 1:1 con
   `gold.fact_production` y el feature store — cero joins ambiguos entre
   training, store e inferencia.
-- MASE como métrica primaria hace verificable el KPI del PRD con un solo
-  número y es robusta a pozos shut-in.
+- MASE + gate 2 operacionalizan el KPI del PRD (ganarle al baseline naive;
+  formulado allí como reducción de MAPE a corto plazo) sobre el horizonte de
+  1–12 meses de Fase 3, con métricas robustas a pozos shut-in.
 - Un solo modelo global simplifica training, registry (un solo champion) y
   serving embebido (ADR-0034).
 - Cold-start cubierto por diseño (features estáticas), sin pipeline aparte.
