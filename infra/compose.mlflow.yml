@@ -1,0 +1,55 @@
+# MLflow tracking + model registry UI (ADR-0032, backlog F3-08).
+#
+# Topology (ADR-0032): the *backend store* is a shared cloud Postgres
+# (Neon/Supabase free tier, or RDS) and the *artifact store* is S3, so the
+# whole team sees the same runs/models while the UI runs locally on each dev
+# machine — no 24/7 server to host. Ready-to-deploy in staging (see
+# compose.staging.yml) but not deployed, per the compute budget.
+#
+# Team mode (default, needs cloud credentials in the environment):
+#   export PETROCAST_MLFLOW_BACKEND_URI='postgresql://...neon.../mlflow?sslmode=require'
+#   export PETROCAST_MLFLOW_ARTIFACT_ROOT='s3://<artifacts-bucket>/mlflow'
+#   docker compose -f infra/compose.mlflow.yml up -d --build
+#
+# Local fallback (fully offline, no cloud): uses the `mlflow` database of the
+# data-stack Postgres (created by init 003) and a named volume for artifacts:
+#   docker compose -f infra/compose.data.yml -f infra/compose.mlflow.yml \
+#     --env-file apps/data/.env up -d --build data-postgres mlflow
+#
+# UI: http://localhost:5000 (override host port with PETROCAST_MLFLOW_PORT).
+# Full runbook: docs/runbooks/mlflow-tracking.md
+
+services:
+  mlflow:
+    build: ./mlflow
+    image: petrocast-mlflow:dev
+    environment:
+      # S3 credentials for the artifact store (unused in local fallback).
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    ports:
+      - "${PETROCAST_MLFLOW_PORT:-5000}:5000"
+    volumes:
+      # Artifact storage for the local fallback; ignored when the artifact
+      # root points at S3.
+      - mlflow_artifacts:/mlartifacts
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=${PETROCAST_MLFLOW_BACKEND_URI:-postgresql://petrocast:petrocast@data-postgres:5432/mlflow}
+      - --default-artifact-root=${PETROCAST_MLFLOW_ARTIFACT_ROOT:-/mlartifacts}
+    networks:
+      - petrocast_data
+    restart: unless-stopped
+
+volumes:
+  mlflow_artifacts:
+
+networks:
+  # Same key as in compose.data.yml: when both files run as one project the
+  # service joins the data network (local fallback reaches data-postgres);
+  # standalone, compose just creates an isolated network with this name.
+  petrocast_data:
