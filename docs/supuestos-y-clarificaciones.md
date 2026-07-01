@@ -435,8 +435,14 @@ sin unidad; la fuente real es **mensual**, **métrica** y multi-fluido. Queda si
 definir: `id_well` ¿es `sigla` o `idpozo`? (un pozo puede producir de varias
 formaciones → distinto grano); `prod` ¿es petróleo, gas o equivalente, y en qué
 unidad?; ¿cómo se sirve un dato mensual sobre un contrato de fechas diarias?
-_Supuesto:_ `id_well = sigla`, `prod = prod_pet` en m³, devolviendo el valor del
-mes correspondiente a cada fecha. A validar.
+_Supuesto:_ `prod = prod_pet` en m³, devolviendo el valor del mes
+correspondiente a cada fecha. **Resuelto parcialmente (Fase 3):**
+`well_id = idpozo` casteado a texto, alineado al grano de
+`gold.fact_production` — decidido en
+[ADR-0030](adr/0030-objetivo-predictivo-horizonte-metricas.md); el supuesto
+provisorio `id_well = sigla` queda **superado**. La traducción `sigla` →
+`idpozo` en la capa de API, si se necesita, es responsabilidad del contrato D
+(#17 / ADR-0034).
 
 **⚠️ A4 — Unidad de las métricas de negocio.** La adenda no dice en qué unidad
 exponer la producción en el semantic/BI layer: ¿m³ nativo, BOE, o bbl/Mscf para
