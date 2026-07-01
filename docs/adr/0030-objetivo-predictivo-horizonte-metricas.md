@@ -251,7 +251,7 @@ reproducible.
 - [Hyndman, R. J. — "Another look at forecast-accuracy metrics for
   intermittent demand"](https://robjhyndman.com/papers/foresight.pdf) —
   limitaciones del MAPE y definición de MASE.
-- Arps, J. J. (1945). _Analysis of Decline Curves._ Transactions of the AIME,
+- Arps, J. J. (1945). *Analysis of Decline Curves.* Transactions of the AIME,
   160(01), 228–247.
 - [petbox-dca](https://github.com/petbox-dev/dca) — librería de decline curve
   analysis para el baseline Arps.
