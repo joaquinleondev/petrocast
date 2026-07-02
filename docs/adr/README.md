@@ -65,4 +65,5 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0030](./0030-objetivo-predictivo-horizonte-metricas.md) | Objetivo predictivo, horizonte y métricas | Propuesto | 2026-07-01 |
 | [0031](./0031-estrategia-feature-store.md)               | Estrategia de feature store              | Propuesto | 2026-07-02 |
 | [0032](./0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry MLflow | Propuesto | 2026-06-28 |
+| [0033](./0033-orquestacion-entrenamiento-retraining.md)  | Orquestación de training y retraining    | Propuesto | 2026-07-02 |
 | [0034](./0034-serving-modelo-contrato-api.md)            | Serving embebido en FastAPI y contrato API | Propuesto | 2026-06-28 |
