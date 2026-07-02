@@ -26,3 +26,57 @@ def test_api_conforms_to_openapi(case):
             schemathesis.checks.ignored_auth,
         ],
     )
+
+
+def test_prediction_contract_is_frozen():
+    """Contrato D (ADR-0034 / F3-17): request/response of /api/v1/predictions.
+
+    Consumed by F3-18/F3-20/F3-21/F3-23. Changing any of these fields means
+    breaking the frozen handoff contract: revisit ADR-0034 and notify the
+    consumers before touching this test.
+    """
+    spec = app.openapi()
+    operation = spec["paths"]["/api/v1/predictions"]["get"]
+
+    params = {p["name"]: p for p in operation["parameters"]}
+    assert set(params) == {"id_well", "as_of_date", "horizon"}
+    assert all(p["required"] for p in params.values())
+    assert params["as_of_date"]["schema"]["format"] == "date"
+    assert params["horizon"]["schema"]["minimum"] == 1
+    assert params["horizon"]["schema"]["maximum"] == 12
+
+    assert set(operation["responses"]) == {"200", "403", "404", "422", "503"}
+
+    for status_code in ("403", "404", "503"):
+        error_ref = operation["responses"][status_code]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        assert error_ref.endswith("/PredictionError")
+
+    validation_ref = operation["responses"]["422"]["content"]["application/json"]["schema"]["$ref"]
+    assert validation_ref.endswith("/PredictionValidationError")
+
+    error = spec["components"]["schemas"]["PredictionError"]
+    assert set(error["required"]) == {"detail"}
+    assert error["properties"]["detail"]["type"] == "string"
+
+    validation_error = spec["components"]["schemas"]["PredictionValidationError"]
+    assert set(validation_error["required"]) == {"detail"}
+    assert validation_error["properties"]["detail"]["type"] == "array"
+    assert validation_error["properties"]["detail"]["items"]["$ref"].endswith(
+        "/PredictionValidationIssue"
+    )
+
+    response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    response = spec["components"]["schemas"][response_ref.rsplit("/", 1)[-1]]
+    assert set(response["required"]) == {
+        "id_well",
+        "as_of_date",
+        "horizon",
+        "model_version",
+        "predictions",
+    }
+
+    point_ref = response["properties"]["predictions"]["items"]["$ref"]
+    point = spec["components"]["schemas"][point_ref.rsplit("/", 1)[-1]]
+    assert set(point["required"]) == {"month", "oil_prod_m3"}
