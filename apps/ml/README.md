@@ -29,7 +29,7 @@ El URI estable del modelo servido es
 ## Interfaces públicas
 
 - `read_features()` delega la lectura al feature store mediante `FeatureReader`.
-- `train()` define el contrato del pipeline de entrenamiento de F3-13.
+- `train()` entrena el baseline LightGBM global (F3-13).
 - `create_tracking_client()` define el cliente de runs de F3-14.
 - `create_registry_client()` y `promote_champion()` definen el registry de F3-16.
 - `load_champion()` y `predict()` definen el runtime de inferencia de F3-18.
@@ -37,6 +37,40 @@ El URI estable del modelo servido es
 Las implementaciones diferidas fallan explícitamente con `NotImplementedError`
 hasta que aterrice el issue correspondiente; sus firmas quedan disponibles para
 que API y Data integren el paquete sin duplicar contratos.
+
+## Entrenamiento local (F3-13)
+
+Baseline reproducible según ADR-0030: **un único LightGBM global** sobre todos
+los pozos, con las features del contrato A más `horizon` como input (estrategia
+multi-step directa) y las estáticas de `dim_well` como categóricas nativas
+(cold-start). Parámetros **fijos** en `training.FIXED_PARAMS` — sin tuning en
+esta fase.
+
+El split es **temporal, nunca aleatorio**: `as_of_date` del request es el corte
+único de evaluación (test); los cortes anteriores van a train (y opcionalmente
+validation con `--validation-cutoffs`). El target sigue el contrato F: horizonte
+`h` apunta al mes `as_of + (h − 1)`; meses sin actual observado no generan fila.
+La baseline naive (persistencia: último valor observado antes del corte) se
+computa **sobre el mismo split** y sus MAE/RMSE en m³ acompañan las métricas del
+modelo.
+
+Entrenar offline contra los fixtures del repo (sin base de datos ni MLflow):
+
+```bash
+uv run python -m petrocast_ml.training \
+  --features-csv tests/fixtures/well_features.csv \
+  --production-csv tests/fixtures/production_monthly.csv \
+  --as-of 2026-01-01 \
+  --horizons 1,2,3 \
+  --output-dir ./artifacts/baseline
+```
+
+El artefacto queda en `--output-dir`: `model.txt` (booster de LightGBM,
+cargable sin sklearn vía `training.load_booster`) y `metadata.json` con request,
+huella del dataset (filas, pozos, cortes, horizontes), parámetros, métricas y
+versiones de código (`PETROCAST_GIT_SHA` se registra si está en el entorno).
+Contra el warehouse real, el extract de features llega con la materialización
+de F3-12; el tracking en MLflow con F3-14.
 
 ## Verificación
 
