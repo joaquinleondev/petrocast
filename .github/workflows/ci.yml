@@ -158,9 +158,32 @@ jobs:
             apps/data/dbt/target/catalog.json
           if-no-files-found: error
 
+  ml:
+    name: ml checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ml
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ml/uv.lock
+      - name: Install deps
+        run: uv sync --frozen
+      # Offline by design (F3-10): the ML tests run on committed fixtures only —
+      # no Postgres, no MLflow server, no internet.
+      - name: Run ml tests
+        run: uv run pytest -q
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy
+
   build:
     name: build & scan
-    needs: [lint, test, data-pipeline]
+    needs: [lint, test, data-pipeline, ml]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
