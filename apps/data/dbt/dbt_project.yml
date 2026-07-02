@@ -21,6 +21,10 @@ models:
       +schema: silver
     gold:
       +schema: gold
+    # Feature store (ADR-0031): ML contract layer, separate from gold. One row
+    # per (well_id, as_of_date); training and inference read the same tables.
+    features:
+      +schema: features
 
 # Data quality (ADR-0025): persist failing rows so a check leaves evidence, not
 # just a runtime pass/fail. Failures land in the `<schema>_dbt_test__audit`

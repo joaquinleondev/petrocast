@@ -2,7 +2,8 @@
 
 Scaffold de Fase 2 para el pipeline de datos:
 
-- PostgreSQL 16 como data warehouse con schemas `bronze`, `silver` y `gold`.
+- PostgreSQL 16 como data warehouse con schemas `bronze`, `silver`, `gold` y
+  `features` (feature store, Fase 3).
 - Dagster como orquestador con UI en `:3000`.
 - dbt integrado desde Dagster mediante `dagster-dbt`.
 - dlt integrado desde Dagster mediante `dagster-dlt`.
@@ -59,7 +60,7 @@ docker compose --env-file apps/data/.env -f infra/compose.data.yml down -v
 
 En Dagster, materializá estos assets:
 
-1. `warehouse_schemas_ready`: asegura los schemas medallion.
+1. `warehouse_schemas_ready`: asegura los schemas medallion + `features`.
 2. `petrocast_smoke`: carga una tabla de prueba con dlt en `bronze`.
 3. `smoke_events`: ejecuta dbt sobre el modelo de prueba en `silver`.
 
@@ -163,6 +164,42 @@ sin dbt Semantic Layer formal (ver ADR-0029). Se materializan como `view` (tag
 Son **consumibles desde Metabase**: el rol read-only `petrocast_bi` lee todo
 `gold` (incluye vistas) por `GRANT SELECT ON ALL TABLES` + `ALTER DEFAULT
 PRIVILEGES`, así que aparecen automáticamente al sincronizar la base.
+
+## Feature store (schema `features`)
+
+F3-09 agrega la capa de feature store para ML (ADR-0031): tablas propias en el
+schema `features` de Postgres, generadas por dbt, separadas de `gold` (que
+sigue siendo la capa de consumo BI/API). El contrato A queda congelado en
+`features.well_features`:
+
+- **Grano:** una fila por `(well_id, as_of_date)`. `well_id` es la clave de
+  negocio de `gold.fact_production` (`idpozo` como texto, ADR-0030);
+  `as_of_date` es la **fecha de corte de conocimiento** (primer dia del mes).
+- **Point-in-time:** cada feature se computa exclusivamente con
+  `production_month < as_of_date` — una fila materializada para un corte pasado
+  nunca ve datos posteriores (backtesting honesto; el test automatico de PIT
+  llega en F3-11).
+- **Relacion con Gold:** los modelos leen `gold.fact_production` (serie de
+  produccion) y `gold.dim_well` (atributos estaticos para cold-start) via
+  `ref()`, asi el lineage Gold → features queda en dbt docs/DataHub.
+- **Unidades:** todos los volumenes en m³ (A4 de supuestos).
+- **RNF de la adenda:** las features quedan **persistidas** y tanto el training
+  (F3-13) como la inferencia (F3-18) leen la misma tabla por la misma clave —
+  ninguna feature critica se calcula solo in-memory al servir.
+- **Materializacion:** incremental `delete+insert` por `feature_key` (hash de
+  la clave). La var `as_of_date` elige el corte a materializar (el asset
+  particionado de Dagster llega en F3-12); sin la var se construye el ultimo
+  corte disponible en gold. Re-materializar un corte es idempotente; los demas
+  cortes quedan inmutables.
+
+```bash
+uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:features \
+  --vars '{"as_of_date": "2026-05-01"}'
+```
+
+La unicidad de `(well_id, as_of_date)` se testea con
+`dbt_utils.unique_combination_of_columns`; grano, claves y unidades quedan
+documentados por columna en `models/features/schema.yml`.
 
 ## Calidad de datos
 
