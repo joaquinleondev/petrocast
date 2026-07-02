@@ -39,14 +39,34 @@ reservado de settings (`extra="forbid"` rechaza claves desconocidas del
 
 ## Provisioning del backend compartido (una vez)
 
-1. **Postgres cloud:** crear un proyecto free-tier en [Neon](https://neon.tech)
-   (o Supabase), con una base `mlflow`. Copiar la URI de conexión con
-   `sslmode=require`. Compartir la credencial por el canal seguro del equipo
-   (no por git).
-2. **Bucket S3:** reusar el módulo `infra/terraform/modules/s3-artifacts`
-   (agregar un bucket `petrocast-ml-artifacts` en `envs/shared`) o crearlo por
-   consola. Crear un IAM user/clave con acceso limitado al bucket para los
-   integrantes (o usar credenciales personales con permiso).
+1. **Postgres cloud:** crear un proyecto free-tier en
+   [Supabase](https://supabase.com) (o [Neon](https://neon.tech)). En Supabase
+   usar el **Session pooler** (puerto 5432, host `...pooler.supabase.com`) sobre
+   la base `postgres` que trae por defecto; en Neon se puede nombrar `mlflow`.
+   Copiar la URI con `?sslmode=require` — es `MLFLOW_TRACKING_URI` /
+   `PETROCAST_MLFLOW_BACKEND_URI`. En el primer arranque MLflow crea sus tablas.
+   Compartir la credencial por el canal seguro del equipo (no por git).
+2. **Bucket S3 + IAM user (Terraform):** el módulo
+   `infra/terraform/modules/s3-mlflow` crea el bucket `petrocast-ml-artifacts`
+   (sin expiración de objetos, a diferencia de `s3-artifacts`) y un IAM user
+   acotado a ese bucket con su access key. Aplicar desde `envs/shared`:
+
+   ```bash
+   make -C infra/terraform apply-shared
+   ```
+
+   Obtener los valores (el secret es sensitive → hace falta `-raw`):
+
+   ```bash
+   cd infra/terraform/envs/shared
+   terraform output -raw mlflow_artifact_root          # s3://petrocast-ml-artifacts/mlflow
+   terraform output -raw mlflow_iam_access_key_id      # AWS_ACCESS_KEY_ID
+   terraform output -raw mlflow_iam_secret_access_key  # AWS_SECRET_ACCESS_KEY
+   ```
+
+   El bucket vive en la región del env `shared` (`us-east-2`) → usar esa como
+   `AWS_DEFAULT_REGION`. La access key queda en el state de Terraform (cifrado,
+   no en git); compartirla por el canal seguro del equipo.
 3. Exportar `PETROCAST_MLFLOW_BACKEND_URI`, `PETROCAST_MLFLOW_ARTIFACT_ROOT` y
    las credenciales AWS en el entorno local de cada integrante.
 
@@ -54,8 +74,11 @@ reservado de settings (`extra="forbid"` rechaza claves desconocidas del
 
 ```bash
 # Modo equipo (backend cloud + S3):
-export PETROCAST_MLFLOW_BACKEND_URI='postgresql://...neon.../mlflow?sslmode=require'
+export PETROCAST_MLFLOW_BACKEND_URI='postgresql://postgres.<ref>:<pass>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require'
 export PETROCAST_MLFLOW_ARTIFACT_ROOT='s3://petrocast-ml-artifacts/mlflow'
+export AWS_ACCESS_KEY_ID='<mlflow_iam_access_key_id>'
+export AWS_SECRET_ACCESS_KEY='<mlflow_iam_secret_access_key>'
+export AWS_DEFAULT_REGION='us-east-2'
 docker compose -f infra/compose.mlflow.yml up -d --build
 
 # Modo fallback local (sin credenciales cloud, junto al data stack):

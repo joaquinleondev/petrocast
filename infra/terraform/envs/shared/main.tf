@@ -25,6 +25,13 @@ module "s3_artifacts" {
   project = var.project
 }
 
+# MLflow artifact store + laptop IAM user (ADR-0032, F3-08). Backend store is
+# Postgres in the cloud (Supabase/Neon), out of Terraform's scope.
+module "s3_mlflow" {
+  source  = "../../modules/s3-mlflow"
+  project = var.project
+}
+
 data "aws_s3_bucket" "tf_state" {
   bucket = var.tf_state_bucket_name
 }
