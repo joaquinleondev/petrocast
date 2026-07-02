@@ -8,11 +8,17 @@
     )
 }}
 
--- Gold -> Features: feature store base table (contract A, ADR-0031). One row
--- per (well_id, as_of_date): what was known about the well at that knowledge
+-- Gold -> Features: feature store table (contract A, ADR-0031). One row per
+-- (well_id, as_of_date): what was known about the well at that knowledge
 -- cutoff. Point-in-time rule: every feature is computed exclusively from
 -- production months strictly BEFORE `as_of_date`, so a row materialized for a
--- past cutoff never leaks future data (training and backtesting stay honest).
+-- past cutoff never leaks future data (training and backtesting stay honest);
+-- the singular test assert_well_features_point_in_time recomputes the table
+-- from gold and fails on any divergence.
+-- F3-11 feature families (ADR-0030): calendar lags (1/2/3/6/12 months back),
+-- rolling means/stddevs over observed months (missing months excluded, not
+-- imputed as zero), linear trend via regr_slope in m³/month, plus recency
+-- (months_since_last_observed) and intermittency (zero_months_12m) signals.
 -- The `as_of_date` var selects the partition to materialize (the Dagster asset
 -- of F3-12 passes it per monthly partition); without it, the model builds the
 -- latest cutoff available in gold (max production_month + 1 month). Cutoffs are
@@ -47,7 +53,12 @@ known as (
         production.well_id,
         production.production_month,
         production.oil_prod_m3,
-        cutoff.as_of_date
+        cutoff.as_of_date,
+        cast(
+            extract(year from production.production_month) * 12
+            + extract(month from production.production_month)
+            as double precision
+        ) as month_index
     from production
     cross join cutoff
     where production.production_month < cutoff.as_of_date
@@ -68,12 +79,46 @@ aggregated as (
         max(case
             when production_month = cast(as_of_date - interval '3 months' as date) then oil_prod_m3
         end) as oil_prod_m3_lag_3m,
+        max(case
+            when production_month = cast(as_of_date - interval '6 months' as date) then oil_prod_m3
+        end) as oil_prod_m3_lag_6m,
+        max(case
+            when production_month = cast(as_of_date - interval '12 months' as date) then oil_prod_m3
+        end) as oil_prod_m3_lag_12m,
         avg(case
             when production_month >= cast(as_of_date - interval '3 months' as date) then oil_prod_m3
         end) as oil_prod_m3_roll_mean_3m,
         avg(case
             when production_month >= cast(as_of_date - interval '6 months' as date) then oil_prod_m3
         end) as oil_prod_m3_roll_mean_6m,
+        avg(case
+            when production_month >= cast(as_of_date - interval '12 months' as date) then oil_prod_m3
+        end) as oil_prod_m3_roll_mean_12m,
+        stddev(case
+            when production_month >= cast(as_of_date - interval '6 months' as date) then oil_prod_m3
+        end) as oil_prod_m3_roll_std_6m,
+        stddev(case
+            when production_month >= cast(as_of_date - interval '12 months' as date) then oil_prod_m3
+        end) as oil_prod_m3_roll_std_12m,
+        regr_slope(
+            case
+                when production_month >= cast(as_of_date - interval '6 months' as date)
+                    then oil_prod_m3
+            end,
+            month_index
+        ) as oil_prod_m3_trend_6m,
+        regr_slope(
+            case
+                when production_month >= cast(as_of_date - interval '12 months' as date)
+                    then oil_prod_m3
+            end,
+            month_index
+        ) as oil_prod_m3_trend_12m,
+        count(*) filter (
+            where
+            oil_prod_m3 = 0
+            and production_month >= cast(as_of_date - interval '12 months' as date)
+        ) as zero_months_12m,
         count(*) as months_with_history,
         min(production_month) as first_observed_month,
         max(production_month) as last_observed_month
@@ -100,14 +145,27 @@ select
     aggregated.oil_prod_m3_lag_1m,
     aggregated.oil_prod_m3_lag_2m,
     aggregated.oil_prod_m3_lag_3m,
+    aggregated.oil_prod_m3_lag_6m,
+    aggregated.oil_prod_m3_lag_12m,
     aggregated.oil_prod_m3_roll_mean_3m,
     aggregated.oil_prod_m3_roll_mean_6m,
+    aggregated.oil_prod_m3_roll_mean_12m,
+    aggregated.oil_prod_m3_roll_std_6m,
+    aggregated.oil_prod_m3_roll_std_12m,
+    aggregated.oil_prod_m3_trend_6m,
+    aggregated.oil_prod_m3_trend_12m,
     aggregated.months_with_history,
     cast(
         extract(year from age(aggregated.as_of_date, aggregated.first_observed_month)) * 12
         + extract(month from age(aggregated.as_of_date, aggregated.first_observed_month))
         as integer
     ) as well_age_months,
+    cast(
+        extract(year from age(aggregated.as_of_date, aggregated.last_observed_month)) * 12
+        + extract(month from age(aggregated.as_of_date, aggregated.last_observed_month))
+        as integer
+    ) as months_since_last_observed,
+    aggregated.zero_months_12m,
     aggregated.last_observed_month,
     static_attributes.basin,
     static_attributes.field,

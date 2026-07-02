@@ -65,6 +65,8 @@ class TestWellFeaturesContractA:
                 (1, row.oil_prod_m3_lag_1m),
                 (2, row.oil_prod_m3_lag_2m),
                 (3, row.oil_prod_m3_lag_3m),
+                (6, row.oil_prod_m3_lag_6m),
+                (12, row.oil_prod_m3_lag_12m),
             ):
                 want = by_month.get(row.as_of_date - pd.DateOffset(months=k))
                 if want is None:
@@ -72,19 +74,49 @@ class TestWellFeaturesContractA:
                 else:
                     assert got == pytest.approx(want)
 
-            for k, got in ((3, row.oil_prod_m3_roll_mean_3m), (6, row.oil_prod_m3_roll_mean_6m)):
-                window = known.loc[
-                    known["production_month"] >= row.as_of_date - pd.DateOffset(months=k),
-                    "oil_prod_m3",
+            def window(k: int, known: pd.DataFrame = known, row=row) -> pd.DataFrame:
+                return known.loc[
+                    known["production_month"] >= row.as_of_date - pd.DateOffset(months=k)
                 ]
+
+            for k, got in (
+                (3, row.oil_prod_m3_roll_mean_3m),
+                (6, row.oil_prod_m3_roll_mean_6m),
+                (12, row.oil_prod_m3_roll_mean_12m),
+            ):
                 # Missing months are excluded from the mean, not imputed as zero.
-                assert got == pytest.approx(window.mean(), rel=1e-4)
+                assert got == pytest.approx(window(k)["oil_prod_m3"].mean(), rel=1e-4)
+
+            for k, got in ((6, row.oil_prod_m3_roll_std_6m), (12, row.oil_prod_m3_roll_std_12m)):
+                want_std = window(k)["oil_prod_m3"].std(ddof=1)  # sample std, like stddev
+                if math.isnan(want_std):
+                    assert math.isnan(got), f"roll_std_{k}m needs >= 2 observed months"
+                else:
+                    assert got == pytest.approx(want_std, rel=1e-4)
+
+            for k, got in ((6, row.oil_prod_m3_trend_6m), (12, row.oil_prod_m3_trend_12m)):
+                frame = window(k)
+                if len(frame) < 2:
+                    assert math.isnan(got), f"trend_{k}m needs >= 2 observed months"
+                    continue
+                # Least-squares slope vs calendar month index == Postgres regr_slope.
+                months = frame["production_month"]
+                x = (months.dt.year * 12 + months.dt.month).astype(float)
+                y = frame["oil_prod_m3"].astype(float)
+                slope = ((x - x.mean()) * (y - y.mean())).sum() / ((x - x.mean()) ** 2).sum()
+                assert got == pytest.approx(slope, rel=1e-4)
+
+            zero_12 = int((window(12)["oil_prod_m3"] == 0).sum())
+            assert row.zero_months_12m == zero_12
 
             assert row.months_with_history == len(known)
             first = known["production_month"].iloc[0]
+            last = known["production_month"].iloc[-1]
             age = (row.as_of_date.year - first.year) * 12 + (row.as_of_date.month - first.month)
+            since = (row.as_of_date.year - last.year) * 12 + (row.as_of_date.month - last.month)
             assert row.well_age_months == age
-            assert row.last_observed_month == known["production_month"].iloc[-1]
+            assert row.months_since_last_observed == since
+            assert row.last_observed_month == last
 
     def test_static_attributes_present(self, well_features: pd.DataFrame) -> None:
         """Cold-start features (ADR-0030): every row carries the dim_well statics."""

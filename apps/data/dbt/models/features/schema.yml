@@ -3,19 +3,21 @@ version: 2
 models:
   - name: well_features
     description: >
-      Feature store base table (contract A, ADR-0031). Grain: one row per
+      Feature store table (contract A, ADR-0031). Grain: one row per
       (well_id, as_of_date), where well_id is the business key of
       gold.fact_production (idpozo as text, ADR-0030) and as_of_date is the
       knowledge cutoff (first day of a month). Every feature is computed
       exclusively from gold.fact_production rows with production_month strictly
-      before as_of_date (point-in-time rule); static attributes come from
-      gold.dim_well. All volumes in m³ (A4). Persisted here so training (F3-13)
-      and inference (F3-18) read the same rows by the same key — no critical
-      feature is computed in-memory at serving time (Fase 3 addendum RNF).
-      Cutoffs are immutable once materialized; re-materializing a cutoff via the
-      as_of_date var is idempotent (delete+insert by feature_key). The horizon
-      is NOT part of the key (ADR-0031): the same feature vector serves all
-      horizons 1-12.
+      before as_of_date (point-in-time rule, recomputed end-to-end by the
+      singular test assert_well_features_point_in_time); static attributes come
+      from gold.dim_well. All volumes in m³ (A4). Persisted here so training
+      (F3-13) and inference (F3-18) read the same rows by the same key — no
+      critical feature is computed in-memory at serving time (Fase 3 addendum
+      RNF). Rolling windows aggregate the months actually observed inside the
+      window; missing months are excluded, not imputed as zero. Cutoffs are
+      immutable once materialized; re-materializing a cutoff via the as_of_date
+      var is idempotent (delete+insert by feature_key). The horizon is NOT part
+      of the key (ADR-0031): the same feature vector serves all horizons 1-12.
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -25,6 +27,7 @@ models:
     columns:
       - name: feature_key
         description: Surrogate primary key, hash of (well_id, as_of_date).
+        data_type: text
         tests:
           - not_null
           - unique
@@ -34,52 +37,121 @@ models:
           Integrity vs dim_well is already enforced upstream by the fact's
           well_key relationship test (well_key is a deterministic hash of
           well_id), so no relationships test is repeated here.
+        data_type: text
         tests:
           - not_null
       - name: as_of_date
         description: >
           Knowledge cutoff (first day of month). Features only use production
           months strictly before this date.
+        data_type: date
         tests:
           - not_null
       - name: oil_prod_m3_lag_1m
         description: >
           Oil production (m³) of the month immediately before as_of_date. Null
           when the well has no row for that month (e.g. no DDJJ filed).
+        data_type: numeric
       - name: oil_prod_m3_lag_2m
         description: Oil production (m³) two months before as_of_date; null if not observed.
+        data_type: numeric
       - name: oil_prod_m3_lag_3m
         description: Oil production (m³) three months before as_of_date; null if not observed.
+        data_type: numeric
+      - name: oil_prod_m3_lag_6m
+        description: Oil production (m³) six months before as_of_date; null if not observed.
+        data_type: numeric
+      - name: oil_prod_m3_lag_12m
+        description: >
+          Oil production (m³) twelve months before as_of_date (same month last
+          year, the seasonal reference); null if not observed.
+        data_type: numeric
       - name: oil_prod_m3_roll_mean_3m
         description: >
           Mean oil production (m³) over observed months in the 3 months before
           as_of_date. Missing months are excluded from the mean, not counted as
-          zero (refined in F3-11).
+          zero.
+        data_type: numeric
       - name: oil_prod_m3_roll_mean_6m
         description: >
           Mean oil production (m³) over observed months in the 6 months before
           as_of_date. Missing months are excluded from the mean, not counted as
-          zero (refined in F3-11).
+          zero.
+        data_type: numeric
+      - name: oil_prod_m3_roll_mean_12m
+        description: >
+          Mean oil production (m³) over observed months in the 12 months before
+          as_of_date. Missing months are excluded from the mean, not counted as
+          zero.
+        data_type: numeric
+      - name: oil_prod_m3_roll_std_6m
+        description: >
+          Sample standard deviation (m³) of oil production over observed months
+          in the 6 months before as_of_date; null with fewer than 2 observed
+          months. Captures volatility (workovers, shut-ins).
+        data_type: numeric
+      - name: oil_prod_m3_roll_std_12m
+        description: >
+          Sample standard deviation (m³) of oil production over observed months
+          in the 12 months before as_of_date; null with fewer than 2 observed
+          months.
+        data_type: numeric
+      - name: oil_prod_m3_trend_6m
+        description: >
+          Linear decline/growth trend in m³/month: least-squares slope
+          (regr_slope) of oil production vs. calendar month index over observed
+          months in the 6 months before as_of_date. Null with fewer than 2
+          observed months. Negative for declining wells.
+        data_type: double precision
+      - name: oil_prod_m3_trend_12m
+        description: >
+          Linear decline/growth trend in m³/month over observed months in the
+          12 months before as_of_date (least-squares slope, regr_slope). Null
+          with fewer than 2 observed months.
+        data_type: double precision
       - name: months_with_history
         description: >
           Count of production months observed before as_of_date. Feeds the
           eligibility filter of ADR-0030 (wells with < 12 months are excluded
           from evaluation gates but still receive predictions).
+        data_type: bigint
         tests:
           - not_null
       - name: well_age_months
         description: Whole months elapsed from the first observed production month to as_of_date.
+        data_type: integer
+        tests:
+          - not_null
+      - name: months_since_last_observed
+        description: >
+          Whole months elapsed from the last observed production month to
+          as_of_date. 1 means the well reported the month right before the
+          cutoff; larger values flag stale wells so serving can qualify the
+          prediction.
+        data_type: integer
+        tests:
+          - not_null
+      - name: zero_months_12m
+        description: >
+          Count of observed months with zero oil production (shut-in) in the 12
+          months before as_of_date. Intermittency signal; also flags series
+          where percentage metrics (MAPE) are unreliable (ADR-0030).
+        data_type: bigint
         tests:
           - not_null
       - name: last_observed_month
         description: >
           Most recent production month before as_of_date. Lets serving detect
           stale wells (large gap vs as_of_date).
+        data_type: date
         tests:
           - not_null
       - name: basin
         description: Static well attribute from gold.dim_well (cold-start feature, ADR-0030).
+        data_type: text
       - name: field
         description: Static well attribute (área) from gold.dim_well (cold-start feature, ADR-0030).
+        data_type: text
       - name: resource_type
         description: Static well attribute from gold.dim_well (cold-start feature, ADR-0030).
+        data_type: text

@@ -145,8 +145,11 @@ jobs:
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:f2_10_scaffold
       - name: Build dbt silver
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
+      # cautious: the features PIT singular test refs fact_production AND
+      # well_features; eager indirect selection would run it here, before the
+      # features table exists. It runs in the features step below instead.
       - name: Build dbt gold
-        run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold
+        run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold --indirect-selection cautious
       - name: Build dbt features (feature store)
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:features
       - name: Generate dbt docs (lineage artifacts)
