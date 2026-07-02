@@ -67,3 +67,4 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0032](./0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry MLflow | Propuesto | 2026-06-28 |
 | [0033](./0033-orquestacion-entrenamiento-retraining.md)  | Orquestación de training y retraining    | Propuesto | 2026-07-02 |
 | [0034](./0034-serving-modelo-contrato-api.md)            | Serving embebido en FastAPI y contrato API | Propuesto | 2026-06-28 |
+| [0035](./0035-cicd-pipelines-ml-promocion.md)            | CI/CD de pipelines ML y promoción        | Propuesto | 2026-07-02 |
