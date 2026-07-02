@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/data/**"
+      - "apps/ml/**"
       - ".github/workflows/build-data.yml"
   workflow_dispatch:
 
@@ -46,7 +47,8 @@ jobs:
       - name: Build and push data image
         uses: docker/build-push-action@v7
         with:
-          context: apps/data
+          context: apps
+          file: apps/data/Dockerfile
           push: true
           pull: true
           tags: |

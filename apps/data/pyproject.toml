@@ -12,6 +12,7 @@ dependencies = [
     "dbt-core>=1.10.0,<2.0.0",
     "dbt-postgres>=1.10.0,<2.0.0",
     "dlt[postgres]>=1.17.0",
+    "petrocast-ml",
     "psycopg[binary]>=3.2.0",
     "pydantic-settings>=2.0.0",
 ]
@@ -22,6 +23,9 @@ dev = [
     "ruff>=0.7.0",
     "mypy>=1.11.0",
 ]
+
+[tool.uv.sources]
+petrocast-ml = { path = "../ml", editable = true }
 
 [tool.ruff]
 line-length = 100

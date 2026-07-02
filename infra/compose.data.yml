@@ -28,8 +28,8 @@ services:
 
   dagster:
     build:
-      context: ../apps/data
-      dockerfile: Dockerfile
+      context: ../apps
+      dockerfile: data/Dockerfile
     image: petrocast-data:dev
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home

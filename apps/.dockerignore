@@ -1,0 +1,12 @@
+**/.env
+**/.venv
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/build
+**/dist
+data/dbt/logs
+data/dbt/target
