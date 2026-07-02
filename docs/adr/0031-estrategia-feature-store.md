@@ -165,11 +165,17 @@ generadas por dbt**, como feature store offline unificado. Especificación:
 
 - **Sin online store:** una predicción para un pozo requiere que su
   partición de features esté materializada; un `as_of_date` no materializado
-  responde error claro (#18) o dispara materialización. Aceptable: grano
-  mensual, la materialización corre en el job de retrain (#19).
+  responde **503** (contrato D, ADR-0034), no dispara materialización
+  on-demand — recomputar en el camino de request violaría el <5s del PRD.
+  Aceptable: la materialización corre de antemano en el job de retrain
+  (#19), no en el momento de servir.
 - **Sin registry de features dedicado** (catálogo, TTLs, owners por
   feature): se cubre con `schema.yml` + DataHub, suficiente para ~decenas de
-  features y 3 personas.
+  features y 3 personas. En rigor esto es un **patrón** de feature store
+  construido sobre el stack existente (tablas dbt + tests), no una
+  herramienta dedicada (Feast/Tecton): la corrección PIT depende de que cada
+  modelo filtre bien `as_of_date` más el test #11, no de una primitiva
+  estructural del sistema que la garantice por diseño.
 - Postgres single-node limita el volumen; con ~48k filas-mes en
   `fact_production` hoy, el margen es de órdenes de magnitud.
 - Filas de cortes mensuales acumulan storage (una foto por pozo por corte).
