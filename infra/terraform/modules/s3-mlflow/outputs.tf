@@ -14,12 +14,12 @@ output "artifact_root" {
 }
 
 output "iam_access_key_id" {
-  value       = var.create_iam_user ? aws_iam_access_key.mlflow[0].id : null
-  description = "AWS_ACCESS_KEY_ID for the MLflow artifacts IAM user (null if create_iam_user=false)"
+  value       = one(aws_iam_access_key.mlflow[*].id)
+  description = "AWS_ACCESS_KEY_ID for the MLflow artifacts IAM user (null when create_iam_user=false)"
 }
 
 output "iam_secret_access_key" {
-  value       = var.create_iam_user ? aws_iam_access_key.mlflow[0].secret : null
+  value       = one(aws_iam_access_key.mlflow[*].secret)
   sensitive   = true
-  description = "AWS_SECRET_ACCESS_KEY for the MLflow artifacts IAM user — retrieve with `terraform output -raw`"
+  description = "AWS_SECRET_ACCESS_KEY for the MLflow artifacts IAM user (null when create_iam_user=false)"
 }

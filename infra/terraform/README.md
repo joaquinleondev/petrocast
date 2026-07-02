@@ -116,7 +116,7 @@ modules/
 ├── ecr/              — Repo ECR con lifecycle policies y scan on push
 ├── route53/          — Hosted zone + records DNS por env
 ├── s3-artifacts/     — Buckets artifacts y reports (lifecycle: expiran a 90d)
-├── s3-mlflow/        — Bucket de artefactos MLflow (sin expiración) + IAM user local
+├── s3-mlflow/        — Bucket de artefactos MLflow (sin expiración; acceso por SSO)
 ├── iam-github-oidc/  — OIDC provider + ci-role + deploy-role
 └── cloudwatch/       — Log groups por env, retención 14/30 días
 ```

@@ -11,13 +11,14 @@ variable "artifact_prefix" {
 
 variable "create_iam_user" {
   type        = bool
-  default     = true
+  default     = false
   description = <<-EOT
     Create a dedicated, bucket-scoped IAM user + access key for team members
     running MLflow from their laptops. The secret access key lands in Terraform
-    state (encrypted S3 backend) and is exposed as a sensitive output. Set to
-    false to manage credentials manually (e.g. mint the key by hand in the
-    console to keep it out of state).
+    state (encrypted S3 backend) and is exposed as a sensitive output.
+    Default false: many org accounts (e.g. the UDESA sandbox) deny
+    iam:CreateUser via an SCP — there, leave this false and reach the bucket
+    with AWS SSO credentials or an EC2 instance profile instead.
   EOT
 }
 

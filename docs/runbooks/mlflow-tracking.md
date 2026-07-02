@@ -46,38 +46,32 @@ reservado de settings (`extra="forbid"` rechaza claves desconocidas del
    Copiar la URI con `?sslmode=require` — es `MLFLOW_TRACKING_URI` /
    `PETROCAST_MLFLOW_BACKEND_URI`. En el primer arranque MLflow crea sus tablas.
    Compartir la credencial por el canal seguro del equipo (no por git).
-2. **Bucket S3 + IAM user (Terraform):** el módulo
-   `infra/terraform/modules/s3-mlflow` crea el bucket `petrocast-ml-artifacts`
-   (sin expiración de objetos, a diferencia de `s3-artifacts`) y un IAM user
-   acotado a ese bucket con su access key. Aplicar desde `envs/shared`:
+2. **Bucket S3 (Terraform):** el módulo `infra/terraform/modules/s3-mlflow`
+   crea el bucket `petrocast-ml-artifacts` (sin expiración de objetos, a
+   diferencia de `s3-artifacts`) en la región del env `shared` (`us-east-2`).
+   Aplicar desde `envs/shared`:
 
    ```bash
    make -C infra/terraform apply-shared
    ```
 
-   Obtener los valores (el secret es sensitive → hace falta `-raw`):
-
-   ```bash
-   cd infra/terraform/envs/shared
-   terraform output -raw mlflow_artifact_root          # s3://petrocast-ml-artifacts/mlflow
-   terraform output -raw mlflow_iam_access_key_id      # AWS_ACCESS_KEY_ID
-   terraform output -raw mlflow_iam_secret_access_key  # AWS_SECRET_ACCESS_KEY
-   ```
-
-   El bucket vive en la región del env `shared` (`us-east-2`) → usar esa como
-   `AWS_DEFAULT_REGION`. La access key queda en el state de Terraform (cifrado,
-   no en git); compartirla por el canal seguro del equipo.
+   > **Credenciales S3 = AWS SSO, no un IAM user.** La SCP de la organización
+   > (`p-rujzp9jo`) prohíbe `iam:CreateUser`, así que el módulo NO crea un
+   > usuario/clave estática (`create_iam_user = false`). Cada integrante accede
+   > al bucket con sus **credenciales de AWS SSO** — las mismas del login que usa
+   > para Terraform. Son temporales e incluyen `AWS_SESSION_TOKEN`; al expirar,
+   > re-login y recrear el contenedor (`up -d --force-recreate`).
 3. Exportar `PETROCAST_MLFLOW_BACKEND_URI`, `PETROCAST_MLFLOW_ARTIFACT_ROOT` y
    las credenciales AWS en el entorno local de cada integrante.
 
 ## Levantar la UI local
 
 ```bash
-# Modo equipo (backend cloud + S3):
+# Modo equipo (backend Supabase + artefactos S3 con credenciales SSO):
 export PETROCAST_MLFLOW_BACKEND_URI='postgresql://postgres.<ref>:<pass>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require'
 export PETROCAST_MLFLOW_ARTIFACT_ROOT='s3://petrocast-ml-artifacts/mlflow'
-export AWS_ACCESS_KEY_ID='<mlflow_iam_access_key_id>'
-export AWS_SECRET_ACCESS_KEY='<mlflow_iam_secret_access_key>'
+# Credenciales S3 desde la sesion SSO (exporta las 3 vars, con session token):
+eval "$(aws configure export-credentials --profile <tu-perfil-sso> --format env)"
 export AWS_DEFAULT_REGION='us-east-2'
 docker compose -f infra/compose.mlflow.yml up -d --build
 
