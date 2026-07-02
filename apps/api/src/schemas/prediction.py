@@ -32,9 +32,21 @@ class PredictionResponse(BaseSchema):
     )
     model_version: str = Field(description="Versión del modelo que generó la predicción")
     predictions: list[PredictionPoint] = Field(
-        description="Una predicción por mes, desde el mes siguiente al último observado",
+        description="Una predicción por mes, desde el mes siguiente a la fecha de corte",
     )
 
 
 class PredictionError(BaseSchema):
     detail: str = Field(description="Descripción del error")
+
+
+class PredictionValidationIssue(BaseSchema):
+    loc: list[str | int] = Field(description="Ubicación del parámetro inválido")
+    msg: str = Field(description="Descripción del error de validación")
+    type: str = Field(description="Tipo del error de validación")
+
+
+class PredictionValidationError(BaseSchema):
+    detail: list[PredictionValidationIssue] = Field(
+        description="Errores encontrados al validar los parámetros",
+    )

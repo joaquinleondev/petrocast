@@ -20,6 +20,7 @@ from src.schemas.prediction import (
     PredictionError,
     PredictionPoint,
     PredictionResponse,
+    PredictionValidationError,
 )
 
 router = APIRouter()
@@ -43,6 +44,10 @@ def _add_months(base: date, months: int) -> date:
         404: {
             "description": "Well not found, or no production history at as_of_date",
             "model": PredictionError,
+        },
+        422: {
+            "description": "Invalid query parameters",
+            "model": PredictionValidationError,
         },
         503: {
             "description": "Model or feature store unavailable",
@@ -72,7 +77,6 @@ def get_predictions(
         )
 
     last = history[-1]
-    last_month = date.fromisoformat(str(last["date"]))
     last_value = float(last["prod"])
 
     return PredictionResponse(
@@ -81,7 +85,7 @@ def get_predictions(
         horizon=horizon,
         model_version=MOCK_MODEL_VERSION,
         predictions=[
-            PredictionPoint(month=_add_months(last_month, step), oil_prod_m3=last_value)
+            PredictionPoint(month=_add_months(as_of_date, step), oil_prod_m3=last_value)
             for step in range(1, horizon + 1)
         ],
     )

@@ -45,7 +45,27 @@ def test_prediction_contract_is_frozen():
     assert params["horizon"]["schema"]["minimum"] == 1
     assert params["horizon"]["schema"]["maximum"] == 12
 
-    assert {"403", "404", "422", "503"} <= set(operation["responses"])
+    assert set(operation["responses"]) == {"200", "403", "404", "422", "503"}
+
+    for status_code in ("403", "404", "503"):
+        error_ref = operation["responses"][status_code]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        assert error_ref.endswith("/PredictionError")
+
+    validation_ref = operation["responses"]["422"]["content"]["application/json"]["schema"]["$ref"]
+    assert validation_ref.endswith("/PredictionValidationError")
+
+    error = spec["components"]["schemas"]["PredictionError"]
+    assert set(error["required"]) == {"detail"}
+    assert error["properties"]["detail"]["type"] == "string"
+
+    validation_error = spec["components"]["schemas"]["PredictionValidationError"]
+    assert set(validation_error["required"]) == {"detail"}
+    assert validation_error["properties"]["detail"]["type"] == "array"
+    assert validation_error["properties"]["detail"]["items"]["$ref"].endswith(
+        "/PredictionValidationIssue"
+    )
 
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     response = spec["components"]["schemas"][response_ref.rsplit("/", 1)[-1]]

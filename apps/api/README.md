@@ -20,9 +20,10 @@ Authentication: pass `X-API-Key: <key>` header. Missing or invalid key returns *
 
 Request: `id_well` (the `well_id` key of `gold.fact_production`), `as_of_date`
 (cutoff date) and `horizon` in months (1-12). Response: one prediction per
-month in m³, plus traceability metadata (`model_version`, `as_of_date`,
-`horizon`). Errors: `404` (unknown well / no history at `as_of_date`),
-`422` (validation), `503` (model or feature store unavailable), `403` (auth).
+month starting after `as_of_date`, in m³, plus traceability metadata
+(`model_version`, `as_of_date`, `horizon`). Errors: `404` (unknown well / no
+history at `as_of_date`), `422` (validation), `503` (model or feature store
+unavailable), `403` (auth).
 
 ```bash
 curl -H "X-API-Key: abcdef12345" \
