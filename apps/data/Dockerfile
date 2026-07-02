@@ -4,26 +4,28 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-WORKDIR /app
+WORKDIR /app/apps/data
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
-COPY dbt ./dbt
+COPY data/pyproject.toml data/uv.lock data/README.md ./
+COPY data/src ./src
+COPY data/dbt ./dbt
+COPY ml/pyproject.toml ml/README.md /app/apps/ml/
+COPY ml/src /app/apps/ml/src
 
-RUN uv sync --frozen --no-dev
-RUN DBT_PROFILES_DIR=/app/dbt /app/.venv/bin/dbt deps --project-dir /app/dbt --profiles-dir /app/dbt
-RUN DBT_PROFILES_DIR=/app/dbt /app/.venv/bin/dbt parse --project-dir /app/dbt --profiles-dir /app/dbt
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
+RUN DBT_PROFILES_DIR=/app/apps/data/dbt /app/apps/data/.venv/bin/dbt deps --project-dir /app/apps/data/dbt --profiles-dir /app/apps/data/dbt
+RUN DBT_PROFILES_DIR=/app/apps/data/dbt /app/apps/data/.venv/bin/dbt parse --project-dir /app/apps/data/dbt --profiles-dir /app/apps/data/dbt
 
 FROM python:3.12-slim-trixie AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:${PATH}" \
-    PYTHONPATH="/app/src" \
+    PATH="/app/apps/data/.venv/bin:${PATH}" \
+    PYTHONPATH="/app/apps/data/src" \
     DAGSTER_HOME="/opt/dagster/dagster_home" \
-    DBT_PROFILES_DIR="/app/dbt"
+    DBT_PROFILES_DIR="/app/apps/data/dbt"
 
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
@@ -32,15 +34,16 @@ RUN apt-get update && \
     groupadd -g 10001 app && \
     useradd -r -u 10001 -g app app
 
-WORKDIR /app
+WORKDIR /app/apps/data
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --chown=app:app src ./src
-COPY --from=builder --chown=app:app /app/dbt ./dbt
+COPY --from=builder /app/apps/data/.venv /app/apps/data/.venv
+COPY --from=builder --chown=app:app /app/apps/ml/src /app/apps/ml/src
+COPY --chown=app:app data/src ./src
+COPY --from=builder --chown=app:app /app/apps/data/dbt ./dbt
 
 RUN mkdir -p "${DAGSTER_HOME}"
 
-COPY --chown=app:app dagster.yaml /opt/dagster/dagster_home/dagster.yaml
+COPY --chown=app:app data/dagster.yaml /opt/dagster/dagster_home/dagster.yaml
 
 RUN chown -R app:app "${DAGSTER_HOME}"
 

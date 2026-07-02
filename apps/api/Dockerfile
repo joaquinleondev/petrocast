@@ -7,10 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN pip install uv --no-cache-dir
 
-WORKDIR /app
+WORKDIR /app/apps/api
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+COPY api/pyproject.toml api/uv.lock ./
+COPY ml/pyproject.toml ml/README.md /app/apps/ml/
+COPY ml/src /app/apps/ml/src
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 # ── runtime: imagen mínima, sin build deps, usuario no-root ──────────────────
 FROM python:3.12-slim-trixie AS runtime
@@ -27,7 +29,7 @@ LABEL org.opencontainers.image.source="https://github.com/petrocast/petrocast" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/apps/api/.venv/bin:$PATH"
 
 RUN apt-get update && \
     echo "apt cache buster: ${APT_CACHE_BUSTER}" >/dev/null && \
@@ -37,10 +39,11 @@ RUN apt-get update && \
     groupadd -g 10001 app && \
     useradd -r -u 10001 -g app app
 
-WORKDIR /app
+WORKDIR /app/apps/api
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --chown=app:app src/ ./src/
+COPY --from=builder /app/apps/api/.venv /app/apps/api/.venv
+COPY --from=builder --chown=app:app /app/apps/ml/src /app/apps/ml/src
+COPY --chown=app:app api/src/ ./src/
 
 USER 10001
 

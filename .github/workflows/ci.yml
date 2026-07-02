@@ -200,7 +200,8 @@ jobs:
       - name: Build image (local)
         uses: docker/build-push-action@v7
         with:
-          context: apps/api
+          context: apps
+          file: apps/api/Dockerfile
           push: false
           load: true
           pull: true

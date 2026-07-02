@@ -76,6 +76,12 @@ docker compose -f infra/compose.data.yml up --build
 > (Grafana también usa el 3000; el Postgres de dev, el 5432):
 > `PETROCAST_DAGSTER_PORT=3001 PETROCAST_DW_PUBLISHED_PORT=5433 docker compose -f infra/compose.data.yml up`
 
+### Paquete de machine learning
+
+El paquete compartido `apps/ml` concentra los contratos de features,
+entrenamiento, tracking, registry e inferencia usados por Data y API. La guía de
+configuración y los comandos locales están en [apps/ml/README.md](apps/ml/README.md).
+
 ## Despliegue
 
 El pipeline CI/CD es completamente automatizado vía GitHub Actions:

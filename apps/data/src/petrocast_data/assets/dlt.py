@@ -14,7 +14,7 @@ from petrocast_data.datos_gob_ar import read_csv_rows
 from petrocast_data.settings import get_settings
 
 
-class BronzeDltTranslator(DagsterDltTranslator):  # type: ignore[misc]  # dagster_dlt sin tipos (Any)
+class BronzeDltTranslator(DagsterDltTranslator):
     """Mapea cada recurso dlt a la AssetKey ["bronze", <tabla>] para que coincida
     con la fuente dbt y el grafo de assets quede conectado bronze→silver→gold (F2-19)."""
 

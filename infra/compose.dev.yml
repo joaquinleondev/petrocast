@@ -5,8 +5,8 @@
 services:
   api:
     build:
-      context: ../apps/api
-      dockerfile: Dockerfile
+      context: ../apps
+      dockerfile: api/Dockerfile
       target: runtime
     image: petrocast-api:dev
     ports:
