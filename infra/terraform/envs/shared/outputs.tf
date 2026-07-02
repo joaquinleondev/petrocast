@@ -53,6 +53,27 @@ output "reports_bucket" {
   description = "Test reports bucket name"
 }
 
+output "mlflow_artifacts_bucket" {
+  value       = module.s3_mlflow.bucket
+  description = "MLflow artifacts bucket name"
+}
+
+output "mlflow_artifact_root" {
+  value       = module.s3_mlflow.artifact_root
+  description = "PETROCAST_MLFLOW_ARTIFACT_ROOT — MLflow --default-artifact-root"
+}
+
+output "mlflow_iam_access_key_id" {
+  value       = module.s3_mlflow.iam_access_key_id
+  description = "AWS_ACCESS_KEY_ID for the MLflow artifacts IAM user"
+}
+
+output "mlflow_iam_secret_access_key" {
+  value       = module.s3_mlflow.iam_secret_access_key
+  sensitive   = true
+  description = "AWS_SECRET_ACCESS_KEY for the MLflow artifacts IAM user — `terraform output -raw mlflow_iam_secret_access_key`"
+}
+
 output "cloudwatch_log_groups" {
   value       = module.cloudwatch.log_group_names
   description = "All CloudWatch log group names"

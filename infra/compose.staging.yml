@@ -67,6 +67,43 @@ services:
       - "traefik.http.routers.datahub.middlewares=petrocast-auth@file"
       - "traefik.http.services.datahub.loadbalancer.server.port=9002"
 
+  # MLflow tracking UI (ADR-0032, F3-08) — LEFT READY, NOT DEPLOYED.
+  # Doubly gated: deploy-data.sh enumerates services explicitly (this one is
+  # not in any profile list) AND the service sits behind the `mlflow` compose
+  # profile, so a manual `dc up -d` won't start it either. To deploy later:
+  # publish the image (F3-23), add mlflow_backend_uri + artifact root to SSM /
+  # stack.env, and run: COMPOSE_PROFILES=mlflow dc up -d mlflow
+  mlflow:
+    profiles: ["mlflow"]
+    image: ${PETROCAST_ECR_REGISTRY}/petrocast/mlflow:staging-latest
+    environment:
+      PETROCAST_MLFLOW_BACKEND_URI: ${PETROCAST_MLFLOW_BACKEND_URI:-}
+      PETROCAST_MLFLOW_ARTIFACT_ROOT: ${PETROCAST_MLFLOW_ARTIFACT_ROOT:-}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        : "$${PETROCAST_MLFLOW_BACKEND_URI:?Set PETROCAST_MLFLOW_BACKEND_URI before enabling the mlflow profile}"
+        : "$${PETROCAST_MLFLOW_ARTIFACT_ROOT:?Set PETROCAST_MLFLOW_ARTIFACT_ROOT before enabling the mlflow profile}"
+        exec mlflow server \
+          --host=0.0.0.0 \
+          --port=5000 \
+          --backend-store-uri="$${PETROCAST_MLFLOW_BACKEND_URI}" \
+          --serve-artifacts \
+          --artifacts-destination="$${PETROCAST_MLFLOW_ARTIFACT_ROOT}" \
+          --allowed-hosts="mlflow.staging.${PETROCAST_DOMAIN},localhost,127.0.0.1"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.mlflow.rule=Host(`mlflow.staging.${PETROCAST_DOMAIN}`)"
+      - "traefik.http.routers.mlflow.entrypoints=websecure"
+      - "traefik.http.routers.mlflow.tls.certresolver=le"
+      - "traefik.http.routers.mlflow.middlewares=petrocast-auth@file"
+      - "traefik.http.services.mlflow.loadbalancer.server.port=5000"
+    restart: unless-stopped
+
   api:
     image: ${PETROCAST_ECR_REGISTRY}/petrocast/mock-api:staging-latest
     networks:

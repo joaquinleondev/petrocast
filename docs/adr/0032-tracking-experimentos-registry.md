@@ -85,8 +85,10 @@ model registry**, con esta topología:
 - **Backend store:** **PostgreSQL en la nube compartida** (Neon o Supabase, free
   tier; alternativa AWS RDS si el equipo prefiere mantenerlo dentro de la cuenta).
   Guarda runs, params, métricas y el registry.
-- **Artifact store:** **S3** (un bucket reutilizando `modules/s3-artifacts`,
-  ADR-0019).
+- **Artifact store:** **S3** en un bucket dedicado, provisionado por
+  `modules/s3-mlflow` siguiendo las convenciones de ADR-0019. El tracking
+  server proxya uploads y downloads con `--artifacts-destination`; los clientes
+  no reciben credenciales S3.
 - **UI:** se levanta con **Docker Compose local** apuntando al backend cloud + S3
   (`infra/compose.mlflow.yml`, backlog #08). Se deja **lista para deployar** en
   staging detrás de Traefik (router `mlflow.staging.petrocast.shop`, mismo patrón
@@ -100,11 +102,11 @@ model registry**, con esta topología:
 
 - **Tracking y registry en una sola herramienta OSS**, sin pegar dos sistemas.
 - **La separación backend store / artifact store es justo lo que habilita el
-  modelo "DB en la nube + UI local".** Apuntando el `--backend-store-uri` a una
-  Postgres compartida y el `--default-artifact-root` a S3, **cada integrante corre
-  la UI local pero lee/escribe los mismos runs, métricas y el mismo champion** —
-  sin necesidad de hostear un servidor 24/7. Cubre la demo y el trabajo en equipo
-  con la misma topología.
+  modelo "DB en la nube + UI local".** Cada servidor local usa
+  `--backend-store-uri` contra una Postgres compartida y
+  `--artifacts-destination` contra S3. Los clientes se conectan por HTTP y el
+  servidor proxya los artefactos. Así, **cada integrante lee y escribe los mismos
+  runs, métricas, artefactos y el mismo champion** sin hostear un servicio 24/7.
 - **SDK Python nativo.** `mlflow.start_run()`, `log_param/metric/artifact` y
   `mlflow.lightgbm.autolog()` instrumentan el training de `apps/ml` con pocas
   líneas (backlog #13/#14); el serving carga el champion con

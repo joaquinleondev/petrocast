@@ -1,0 +1,155 @@
+# Runbook — Plataforma de tracking de experimentos (MLflow)
+
+Cómo operar la plataforma de tracking/registry de Fase 3
+([ADR-0032](../adr/0032-tracking-experimentos-registry.md), backlog F3-08).
+
+## Arquitectura (resumen)
+
+- **Backend store compartido:** PostgreSQL en la nube (Neon/Supabase free tier,
+  alternativa RDS). Ahí viven runs, params, métricas y el model registry.
+- **Artifact store:** bucket S3 (modelos serializados, plots, datasets de
+  evaluación). El servidor MLflow proxya uploads y downloads; los clientes no
+  necesitan credenciales S3.
+- **UI:** cada integrante levanta MLflow **local** con Docker Compose apuntando
+  al backend compartido — todos ven los mismos runs y el mismo champion sin
+  hostear un server 24/7. Queda **listo para deployar** en staging
+  (`mlflow.staging.*`, ver `infra/compose.staging.yml`) pero **no se deploya**
+  por presupuesto de cómputo.
+- **Fallback local (offline):** base `mlflow` en el Postgres del data stack
+  (init `003-create-mlflow-db.sql`) + volumen local de artefactos. Sirve para
+  smokes y demos sin credenciales cloud.
+
+## Contrato C — configuración de tracking (congelado)
+
+Consumido por F3-14 (logging de runs), F3-15 (métricas de evaluación),
+F3-16 (promoción del champion), F3-18 (loader en la API) y F3-19 (retraining).
+
+| Ítem | Valor / variable |
+| ---- | ---------------- |
+| Tracking URI del cliente | `MLFLOW_TRACKING_URI=http://localhost:5000`; en staging, la URL HTTPS publicada por Traefik |
+| Backend del servidor | `PETROCAST_MLFLOW_BACKEND_URI` — URI PostgreSQL compartida; en fallback se deriva de `PETROCAST_DW_USER`, `PETROCAST_DW_PASSWORD` y `PETROCAST_DW_PORT` |
+| Destino de artefactos | `PETROCAST_MLFLOW_ARTIFACT_ROOT` — `s3://<artifacts-bucket>/mlflow`; fallback local `/mlartifacts` (volumen). Se pasa como `--artifacts-destination` |
+| Credenciales S3 del servidor | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` / `AWS_DEFAULT_REGION` |
+| Experimento | `MLFLOW_EXPERIMENT_NAME=petrocast-production-forecast` |
+| Modelo registrado | `petrocast-production`; champion por **alias** `@champion` (`models:/petrocast-production@champion`) — nunca stages deprecados |
+| Tags obligatorios por run | `as_of_date` (corte de features), `features_version`, `git_commit` (o tag de imagen) |
+
+Los nombres están publicados (comentados) en `apps/api/.env.example` y
+`apps/data/.env.example`; se descomentan cuando F3-14/F3-18 agreguen el bloque
+reservado de settings (`extra="forbid"` rechaza claves desconocidas del
+`.env` hasta entonces).
+
+## Provisioning del backend compartido (una vez)
+
+1. **Postgres cloud:** crear un proyecto free-tier en
+   [Supabase](https://supabase.com) (o [Neon](https://neon.tech)). En Supabase
+   usar el **Session pooler** (puerto 5432, host `...pooler.supabase.com`) sobre
+   la base `postgres` que trae por defecto; en Neon se puede nombrar `mlflow`.
+   Copiar la URI con `?sslmode=require` — es
+   `PETROCAST_MLFLOW_BACKEND_URI`. En el primer arranque MLflow crea sus tablas.
+   Compartir la credencial por el canal seguro del equipo (no por git).
+2. **Bucket S3 (Terraform):** el módulo `infra/terraform/modules/s3-mlflow`
+   crea el bucket `petrocast-ml-artifacts` (sin expiración de objetos, a
+   diferencia de `s3-artifacts`) en la región del env `shared` (`us-east-2`).
+   Aplicar desde `envs/shared`:
+
+   ```bash
+   make -C infra/terraform apply-shared
+   ```
+
+   > **Credenciales S3 = AWS SSO, no un IAM user.** La SCP de la organización
+   > (`p-rujzp9jo`) prohíbe `iam:CreateUser`, así que el módulo NO crea un
+   > usuario/clave estática (`create_iam_user = false`). Cada integrante accede
+   > al bucket con sus **credenciales de AWS SSO** — las mismas del login que usa
+   > para Terraform. Son temporales e incluyen `AWS_SESSION_TOKEN`; al expirar,
+   > re-login y recrear el contenedor (`up -d --force-recreate`).
+3. Exportar `PETROCAST_MLFLOW_BACKEND_URI`, `PETROCAST_MLFLOW_ARTIFACT_ROOT` y
+   las credenciales AWS en el entorno del servidor local de cada integrante.
+   Los procesos de training solo necesitan `MLFLOW_TRACKING_URI`.
+
+## Levantar la UI local
+
+```bash
+# Modo equipo (backend Supabase + artefactos S3 con credenciales SSO):
+export PETROCAST_MLFLOW_BACKEND_URI='postgresql://postgres.<ref>:<pass>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require'
+export PETROCAST_MLFLOW_ARTIFACT_ROOT='s3://petrocast-ml-artifacts/mlflow'
+# Credenciales S3 desde la sesion SSO (exporta las 3 vars, con session token):
+eval "$(aws configure export-credentials --profile <tu-perfil-sso> --format env)"
+export AWS_DEFAULT_REGION='us-east-2'
+docker compose -f infra/compose.mlflow.yml up -d --build
+
+# Modo fallback local (sin credenciales cloud, junto al data stack):
+docker compose -f infra/compose.data.yml -f infra/compose.mlflow.yml \
+  --env-file apps/data/.env up -d --build data-postgres mlflow
+```
+
+UI en <http://localhost:5000> (cambiar puerto con `PETROCAST_MLFLOW_PORT`).
+
+## Run de ejemplo (smoke)
+
+Con la UI arriba, este smoke crea un run, registra los tres tags obligatorios,
+sube un artefacto a través del proxy y lo descarga nuevamente:
+
+```bash
+uv run --with mlflow python - <<'EOF'
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import mlflow
+
+mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_experiment("petrocast-production-forecast")
+with TemporaryDirectory() as temp_dir:
+    artifact = Path(temp_dir) / "smoke.txt"
+    artifact.write_text("petrocast-mlflow-smoke\n", encoding="utf-8")
+    with mlflow.start_run(
+        run_name="smoke",
+        tags={
+            "as_of_date": "2024-03-01",
+            "features_version": "smoke-v1",
+            "git_commit": "local-smoke",
+        },
+    ) as run:
+        mlflow.log_param("model", "smoke")
+        mlflow.log_metric("mase_median", 0.42)
+        mlflow.log_artifact(artifact)
+        run_id = run.info.run_id
+        artifact_uri = run.info.artifact_uri
+
+    downloaded = mlflow.artifacts.download_artifacts(
+        run_id=run_id,
+        artifact_path="smoke.txt",
+        dst_path=str(Path(temp_dir) / "download"),
+    )
+    assert artifact_uri.startswith("mlflow-artifacts:/")
+    assert Path(downloaded).read_text(encoding="utf-8") == "petrocast-mlflow-smoke\n"
+    print(f"MLflow smoke OK: {run_id}")
+EOF
+```
+
+El run debe aparecer en la UI con params, métricas, tags y `smoke.txt`. Si dos
+servidores locales apuntan al mismo `PETROCAST_MLFLOW_BACKEND_URI` y destino S3,
+ambos integrantes ven el mismo run y sus artefactos.
+
+## Staging (listo, no deployado)
+
+`infra/compose.staging.yml` define el servicio `mlflow` con router Traefik
+(`mlflow.staging.<dominio>`, TLS + basic-auth) **doblemente gateado**: no está
+en la lista de servicios de `deploy-data.sh` y además vive detrás del compose
+profile `mlflow`. Para deployarlo en el futuro: publicar la imagen a ECR
+(F3-23), cargar `mlflow_backend_uri`/artifact root en SSM → `stack.env`, y
+correr `COMPOSE_PROFILES=mlflow dc up -d mlflow` en el nodo.
+El servidor acepta el host `mlflow.staging.<dominio>` explícitamente mediante
+`--allowed-hosts` y usa el rol de la instancia para acceder a S3.
+
+## Troubleshooting
+
+- **`FATAL: database "mlflow" does not exist` (fallback local):** el volumen
+  `data_postgres` es anterior al init 003. Crear a mano:
+  `docker compose -f infra/compose.data.yml exec data-postgres psql -U petrocast -c 'CREATE DATABASE mlflow;'`.
+- **Artefactos no suben a S3:** verificar `AWS_*` en el entorno del servidor
+  MLflow y recrear el contenedor si las credenciales SSO expiraron. El cliente
+  no accede a S3 directamente.
+- **Rollback del champion:** re-apuntar el alias —
+  `mlflow registered-models alias set petrocast-production champion <version>`
+  (manual/CLI, aceptable para la demo — ver ADR-0032).
