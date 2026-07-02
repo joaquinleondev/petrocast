@@ -6,8 +6,11 @@
 FROM python:3.12-slim
 
 RUN pip install --no-cache-dir \
-    "mlflow>=3.1,<4" \
-    "psycopg2-binary>=2.9" \
-    "boto3>=1.34"
+    "mlflow==3.14.0" \
+    "psycopg2-binary==2.9.12" \
+    "boto3==1.43.39"
 
 EXPOSE 5000
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=12 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=4)"

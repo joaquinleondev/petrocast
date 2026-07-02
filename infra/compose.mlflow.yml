@@ -24,6 +24,11 @@ services:
     build: ./mlflow
     image: petrocast-mlflow:dev
     environment:
+      PETROCAST_MLFLOW_BACKEND_URI: ${PETROCAST_MLFLOW_BACKEND_URI:-}
+      PETROCAST_MLFLOW_ARTIFACT_ROOT: ${PETROCAST_MLFLOW_ARTIFACT_ROOT:-/mlartifacts}
+      PETROCAST_DW_USER: ${PETROCAST_DW_USER:-}
+      PETROCAST_DW_PASSWORD: ${PETROCAST_DW_PASSWORD:-}
+      PETROCAST_DW_PORT: ${PETROCAST_DW_PORT:-5432}
       # S3 credentials for the artifact store (unused in local fallback).
       # AWS_SESSION_TOKEN is required for temporary/SSO credentials, which is how
       # the team reaches the bucket (the org SCP forbids static IAM users).
@@ -38,12 +43,22 @@ services:
       # root points at S3.
       - mlflow_artifacts:/mlartifacts
     command:
-      - mlflow
-      - server
-      - --host=0.0.0.0
-      - --port=5000
-      - --backend-store-uri=${PETROCAST_MLFLOW_BACKEND_URI:-postgresql://petrocast:petrocast@data-postgres:5432/mlflow}
-      - --default-artifact-root=${PETROCAST_MLFLOW_ARTIFACT_ROOT:-/mlartifacts}
+      - /bin/sh
+      - -ec
+      - |
+        backend_uri="$${PETROCAST_MLFLOW_BACKEND_URI}"
+        if [ -z "$${backend_uri}" ]; then
+          : "$${PETROCAST_DW_USER:?Set PETROCAST_DW_USER in apps/data/.env}"
+          : "$${PETROCAST_DW_PASSWORD:?Set PETROCAST_DW_PASSWORD in apps/data/.env}"
+          backend_uri="postgresql://$${PETROCAST_DW_USER}:$${PETROCAST_DW_PASSWORD}@data-postgres:$${PETROCAST_DW_PORT}/mlflow"
+        fi
+        exec mlflow server \
+          --host=0.0.0.0 \
+          --port=5000 \
+          --backend-store-uri="$${backend_uri}" \
+          --serve-artifacts \
+          --artifacts-destination="$${PETROCAST_MLFLOW_ARTIFACT_ROOT}" \
+          --allowed-hosts="localhost,127.0.0.1,mlflow"
     networks:
       - petrocast_data
     restart: unless-stopped

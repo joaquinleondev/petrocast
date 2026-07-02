@@ -76,13 +76,22 @@ services:
   mlflow:
     profiles: ["mlflow"]
     image: ${PETROCAST_ECR_REGISTRY}/petrocast/mlflow:staging-latest
+    environment:
+      PETROCAST_MLFLOW_BACKEND_URI: ${PETROCAST_MLFLOW_BACKEND_URI:-}
+      PETROCAST_MLFLOW_ARTIFACT_ROOT: ${PETROCAST_MLFLOW_ARTIFACT_ROOT:-}
     command:
-      - mlflow
-      - server
-      - --host=0.0.0.0
-      - --port=5000
-      - --backend-store-uri=${PETROCAST_MLFLOW_BACKEND_URI:-}
-      - --default-artifact-root=${PETROCAST_MLFLOW_ARTIFACT_ROOT:-}
+      - /bin/sh
+      - -ec
+      - |
+        : "$${PETROCAST_MLFLOW_BACKEND_URI:?Set PETROCAST_MLFLOW_BACKEND_URI before enabling the mlflow profile}"
+        : "$${PETROCAST_MLFLOW_ARTIFACT_ROOT:?Set PETROCAST_MLFLOW_ARTIFACT_ROOT before enabling the mlflow profile}"
+        exec mlflow server \
+          --host=0.0.0.0 \
+          --port=5000 \
+          --backend-store-uri="$${PETROCAST_MLFLOW_BACKEND_URI}" \
+          --serve-artifacts \
+          --artifacts-destination="$${PETROCAST_MLFLOW_ARTIFACT_ROOT}" \
+          --allowed-hosts="mlflow.staging.${PETROCAST_DOMAIN},localhost,127.0.0.1"
     networks:
       - traefik-public
     labels:
