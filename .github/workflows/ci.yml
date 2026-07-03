@@ -112,7 +112,7 @@ jobs:
               autocommit=True,
           ) as connection:
               with connection.cursor() as cursor:
-                  for schema_name in ("bronze", "silver", "gold"):
+                  for schema_name in ("bronze", "silver", "gold", "features"):
                       cursor.execute(
                           sql.SQL("create schema if not exists {}").format(
                               sql.Identifier(schema_name)
@@ -147,6 +147,8 @@ jobs:
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:silver
       - name: Build dbt gold
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold
+      - name: Build dbt features (feature store)
+        run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:features
       - name: Generate dbt docs (lineage artifacts)
         run: uv run dbt docs generate --project-dir dbt --profiles-dir dbt
       - name: Upload dbt lineage artifacts (for DataHub / F2-21)
