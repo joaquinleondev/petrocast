@@ -1,23 +1,43 @@
 name: deploy-staging
 
+# Se dispara cuando el workflow `ci` termina en `main`. Antes corría en
+# `push: main` en paralelo con `ci` y verificaba en ECR la imagen `sha-<commit>`
+# que `ci` todavía estaba construyendo: una carrera. Cuando la API sumó
+# dependencias pesadas de ML (mlflow/lightgbm/scikit-learn), el build de `ci`
+# pasó a tardar más que la ventana de espera (24×10s) y el deploy empezó a
+# fallar en cada push. Con `workflow_run` esperamos a que `ci` publique la
+# imagen antes de desplegar.
 on:
-  push:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
     name: deploy to staging
     runs-on: ubuntu-latest
+    # Sólo desplegar si `ci` (incluido build & scan) terminó OK; si falló, la
+    # imagen no existe y no hay nada que desplegar.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     environment: staging
     permissions:
       id-token: write
       contents: read
     steps:
+      # `workflow_run` corre en el contexto de la rama por defecto; fijamos el
+      # checkout al commit que disparó `ci`, no al HEAD de main.
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Compute short SHA
         id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        env:
+          # Bajo `workflow_run`, `github.sha` apunta al tip de main, no al
+          # commit desplegado; usamos el head_sha del run de `ci`.
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: echo "short=${HEAD_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -134,7 +154,11 @@ jobs:
           echo "Smoke test failed after 12 attempts" >&2; exit 1
 
       - name: Rollback on smoke failure
-        if: failure()
+        # Sólo revertir si realmente se despachó un deploy en este run. Sin esta
+        # guarda, un fallo en "Verify image"/"Deploy" dispara un
+        # `docker service rollback` sobre un servicio que no cambió, revirtiendo
+        # el último deploy bueno.
+        if: failure() && steps.ssm.outcome == 'success'
         env:
           INSTANCE_ID: ${{ secrets.STAGING_INSTANCE_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
