@@ -24,6 +24,7 @@ import mlflow
 import pandas as pd
 
 from petrocast_ml.config import MlSettings, get_settings
+from petrocast_ml.evaluation.report import EvaluationReport
 from petrocast_ml.training.contracts import TrainingRequest, TrainingResult
 
 TrackingValue = str | int | float | bool
@@ -34,6 +35,10 @@ TrackingValue = str | int | float | bool
 AS_OF_DATE_TAG = "as_of_date"
 FEATURES_VERSION_TAG = "features_version"
 GIT_COMMIT_TAG = "git_commit"
+
+#: Tag set by F3-15: whether the run's candidate passed the blocking gates —
+#: what champion promotion (#16) checks before touching the alias.
+GATES_PASSED_TAG = "gates_passed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +151,7 @@ def record_training_run(
     dataset: pd.DataFrame,
     run_metadata: RunMetadata,
     artifact_dir: Path,
+    evaluation: EvaluationReport | None = None,
 ) -> str:
     """Log one training run (params, metrics, contract-C tags, artifacts).
 
@@ -153,13 +159,18 @@ def record_training_run(
     effective model parameters and dataset footprint, the model/naive metrics
     of ``result``, the three mandatory traceability tags and the artifact
     directory produced by ``save_training_artifact`` (``model.txt`` +
-    ``metadata.json``). Returns the run name so callers can surface it.
+    ``metadata.json``). When an evaluation ran (F3-15) its flat ``eval_*``
+    metrics land on the same run plus the gate tag promotion (#16) reads.
+    Returns the run name so callers can surface it.
     """
     run_name = f"{run_metadata.as_of_date.isoformat()}-h{request.horizon}"
     with client.start_run(run_name=run_name):
         client.set_tags(_contract_c_tags(run_metadata))
         client.log_parameters(_run_parameters(request, result, dataset))
         client.log_metrics(dict(result.metrics))
+        if evaluation is not None:
+            client.log_metrics(evaluation.to_mlflow_metrics())
+            client.set_tags({GATES_PASSED_TAG: str(evaluation.gates_passed).lower()})
         client.log_artifacts(artifact_dir)
     return run_name
 
@@ -167,6 +178,7 @@ def record_training_run(
 __all__ = [
     "AS_OF_DATE_TAG",
     "FEATURES_VERSION_TAG",
+    "GATES_PASSED_TAG",
     "GIT_COMMIT_TAG",
     "MlflowTrackingClient",
     "RunMetadata",

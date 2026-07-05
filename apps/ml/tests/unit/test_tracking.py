@@ -15,9 +15,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from petrocast_ml.evaluation import EvaluationReport, GateThresholds
+from petrocast_ml.evaluation.gates import evaluate_gates
 from petrocast_ml.tracking import (
     AS_OF_DATE_TAG,
     FEATURES_VERSION_TAG,
+    GATES_PASSED_TAG,
     GIT_COMMIT_TAG,
     RunMetadata,
     TrackingClient,
@@ -241,3 +244,71 @@ def test_run_name_distinguishes_two_cutoffs(
         )
     assert fake.run_names == ["2026-01-01-h3", "2025-12-01-h3"]
     assert len(set(fake.run_names)) == 2
+
+
+def _evaluation_report(*, passed: bool) -> EvaluationReport:
+    gates = evaluate_gates(
+        mase_median=0.8 if passed else 1.4,
+        naive_mae_ratio=0.9 if passed else 1.5,
+        arps_mape_gap_pp=None,
+        thresholds=GateThresholds(),
+    )
+    return EvaluationReport(
+        as_of_date=date(2026, 1, 1),
+        horizons=(1, 2, 3),
+        thresholds=GateThresholds(),
+        wells_in_test=4,
+        wells_eligible=3,
+        wells_excluded_short_history=1,
+        wells_mase_undefined=0,
+        arps_fitted_wells=0,
+        arps_failed_wells=3,
+        arps_degraded=True,
+        model_mae_m3=10.0,
+        naive_mae_m3=12.0,
+        distributions={"mase": {"p50": 0.8, "p75": 1.0, "p90": 1.2}},
+        gates=gates,
+        gates_passed=passed,
+    )
+
+
+def test_records_evaluation_metrics_and_gate_tag(
+    result: TrainingResult,
+    request_smoke: TrainingRequest,
+    dataset: pd.DataFrame,
+    artifact_dir: Path,
+    run_metadata: RunMetadata,
+) -> None:
+    fake = FakeTrackingClient()
+    record_training_run(
+        fake,
+        request=request_smoke,
+        result=result,
+        dataset=dataset,
+        run_metadata=run_metadata,
+        artifact_dir=artifact_dir,
+        evaluation=_evaluation_report(passed=False),
+    )
+    assert fake.metrics["eval_gates_passed"] == 0.0
+    assert fake.metrics["eval_mase_p50"] == 0.8
+    assert fake.tags[GATES_PASSED_TAG] == "false"
+
+
+def test_run_without_evaluation_logs_no_eval_keys(
+    result: TrainingResult,
+    request_smoke: TrainingRequest,
+    dataset: pd.DataFrame,
+    artifact_dir: Path,
+    run_metadata: RunMetadata,
+) -> None:
+    fake = FakeTrackingClient()
+    record_training_run(
+        fake,
+        request=request_smoke,
+        result=result,
+        dataset=dataset,
+        run_metadata=run_metadata,
+        artifact_dir=artifact_dir,
+    )
+    assert not any(key.startswith("eval_") for key in fake.metrics)
+    assert GATES_PASSED_TAG not in fake.tags
