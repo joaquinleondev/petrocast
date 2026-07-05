@@ -55,4 +55,4 @@ repos:
     rev: 4.2.2
     hooks:
       - id: sqlfluff-lint
-        files: ^apps/data/dbt/models/.*\.sql$
+        files: ^apps/data/dbt/(models|tests)/.*\.sql$

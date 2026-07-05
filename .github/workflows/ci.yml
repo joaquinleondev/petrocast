@@ -152,6 +152,21 @@ jobs:
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:gold --indirect-selection cautious
       - name: Build dbt features (feature store)
         run: uv run dbt build --project-dir dbt --profiles-dir dbt --select tag:features
+      # F3-11: give the point-in-time / anti-leakage test real power. The default
+      # cutoff (max(production_month)+1 month) has no production on/after it, so a
+      # dropped `where production_month < as_of_date` would be invisible there.
+      # Re-materialize well_features at a HISTORICAL cutoff (2015-06-01) where the
+      # fixture has 12+ months of strict prior history AND production on/after the
+      # cutoff, then run the PIT test over it: a leak of on/after-cutoff months now
+      # makes the persisted features diverge from the strict recomputation and the
+      # test fails. delete+insert leaves the default-cutoff snapshot from the step
+      # above intact, so both cutoffs stay covered. The test is named explicitly so
+      # it runs regardless of indirect-selection defaults.
+      - name: Build + PIT-test dbt features at a historical cutoff
+        run: |
+          uv run dbt build --project-dir dbt --profiles-dir dbt \
+            --select well_features assert_well_features_point_in_time \
+            --vars '{as_of_date: "2015-06-01"}'
       - name: Generate dbt docs (lineage artifacts)
         run: uv run dbt docs generate --project-dir dbt --profiles-dir dbt
       - name: Upload dbt lineage artifacts (for DataHub / F2-21)
