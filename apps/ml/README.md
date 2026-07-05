@@ -29,6 +29,16 @@ El URI estable del modelo servido es
 ## Interfaces públicas
 
 - `read_features()` delega la lectura al feature store mediante `FeatureReader`.
+- `petrocast_ml.features.schema` congela la proyección del feature store
+  (contrato A) y las columnas de entrada del modelo (`MODEL_INPUT_COLUMNS`);
+  `validate_feature_frame()` rechaza frames que violan la regla point-in-time.
+- `build_training_dataset()`, `build_inference_frame()` y `as_model_input()`
+  arman los frames consumibles por training (F3-13) e inferencia (F3-18) según
+  el contrato F (horizonte `h` apunta a `as_of_date + (h - 1)` meses), sin
+  recomputar features.
+- `compute_well_features()` es el espejo pandas del modelo dbt
+  `well_features` — la especificación ejecutable que usan los tests PIT; no es
+  un camino de serving (el único escritor del store es dbt, ADR-0031).
 - `train()` define el contrato del pipeline de entrenamiento de F3-13.
 - `create_tracking_client()` define el cliente de runs de F3-14.
 - `create_registry_client()` y `promote_champion()` definen el registry de F3-16.

@@ -52,14 +52,55 @@ models:
         description: Oil production (m³) three months before as_of_date; null if not observed.
       - name: oil_prod_m3_roll_mean_3m
         description: >
-          Mean oil production (m³) over observed months in the 3 months before
-          as_of_date. Missing months are excluded from the mean, not counted as
-          zero (refined in F3-11).
+          Numeric (m³). Mean oil production over observed months in the 3
+          months before as_of_date. Missing months are excluded from the mean,
+          not counted as zero. Null when no month in the window is observed.
       - name: oil_prod_m3_roll_mean_6m
         description: >
-          Mean oil production (m³) over observed months in the 6 months before
-          as_of_date. Missing months are excluded from the mean, not counted as
-          zero (refined in F3-11).
+          Numeric (m³). Mean oil production over observed months in the 6
+          months before as_of_date. Missing months are excluded from the mean,
+          not counted as zero. Null when no month in the window is observed.
+      - name: oil_prod_m3_roll_std_6m
+        description: >
+          Numeric (m³). Sample standard deviation of oil production over
+          observed months in the 6 months before as_of_date — the volatility
+          of the recent series. Null with fewer than 2 observed months in the
+          window.
+      - name: oil_prod_m3_delta_1m
+        description: >
+          Numeric (m³). Month-over-month momentum: oil_prod_m3_lag_1m minus
+          oil_prod_m3_lag_2m. Negative for a declining well. Null when either
+          lag month is unobserved.
+      - name: oil_prod_m3_ratio_3m_6m
+        description: >
+          Numeric (dimensionless). Recent-vs-longer-run level:
+          oil_prod_m3_roll_mean_3m / oil_prod_m3_roll_mean_6m. Values below 1
+          indicate decline, above 1 recovery. Null when the 6-month mean is
+          zero or unobserved.
+      - name: oil_prod_m3_trend_slope_6m
+        description: >
+          Numeric (m³/month). OLS slope of oil production vs. calendar month
+          index over observed months in the 6 months before as_of_date — the
+          short-term linear decline rate. Null with fewer than 2 observed
+          months in the window.
+      - name: oil_prod_m3_trend_slope_12m
+        description: >
+          Numeric (m³/month). OLS slope of oil production vs. calendar month
+          index over observed months in the 12 months before as_of_date — the
+          medium-term linear decline rate. Null with fewer than 2 observed
+          months in the window.
+      - name: zero_months_last_6m
+        description: >
+          Integer count of observed months with zero production (shut-in) in
+          the 6 months before as_of_date. Captures intermittency (ADR-0030
+          calls out shut-in months as a portfolio-wide pattern). Unobserved
+          months do not count as zeros.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 6
       - name: months_with_history
         description: >
           Count of production months observed before as_of_date. Feeds the
@@ -71,6 +112,18 @@ models:
         description: Whole months elapsed from the first observed production month to as_of_date.
         tests:
           - not_null
+      - name: months_since_last_observed
+        description: >
+          Integer. Whole months elapsed from the most recent observed
+          production month to as_of_date. Always >= 1 by the point-in-time
+          rule; values > 1 flag a stale series (well stopped reporting), which
+          serving uses to qualify predictions. Model-consumable counterpart of
+          last_observed_month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
       - name: last_observed_month
         description: >
           Most recent production month before as_of_date. Lets serving detect
