@@ -338,6 +338,44 @@ jobs:
           role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Reclaim disk on host (prune stale images)
+        if: steps.guard.outputs.open == 'true'
+        continue-on-error: true
+        env:
+          INSTANCE_ID: ${{ secrets.PREVIEW_INSTANCE_ID }}
+        run: |
+          # Self-healing disk guard for the shared preview host. Every push leaves
+          # the previous commit's mock-api image behind, and closed PRs leave
+          # theirs too; on the 19GB root disk this eventually fills up and the next
+          # pull fails ("No such image"), the Swarm task is Rejected and the stack
+          # never becomes healthy. Pruning BEFORE the pull frees that space so a
+          # backlog can't break this deploy. `image prune -af` only removes images
+          # with no running container, so every live stack (this PR's current
+          # version, other open previews, traefik) is preserved. Best-effort: it
+          # never blocks a deploy (continue-on-error + always exit 0).
+          REMOTE='echo "disk before:"; df -h / | tail -1; docker image prune -af; echo "disk after:"; df -h / | tail -1'
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n --arg cmd "$REMOTE" '{commands: [$cmd]}')" \
+            --cloud-watch-output-config \
+              "CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/petrocast/preview/deploy" \
+            --query "Command.CommandId" \
+            --output text)
+          for i in $(seq 1 24); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success) echo "Prune done"; exit 0 ;;
+              Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut)
+                echo "::warning::Prune status=$STATUS (non-blocking)"; exit 0 ;;
+              *) echo "Waiting for prune... ($i/24)" ;;
+            esac
+            sleep 5
+          done
+          echo "::warning::Prune wait timed out (non-blocking)"; exit 0
+
       - name: Deploy via SSM
         id: ssm
         if: steps.guard.outputs.open == 'true'
