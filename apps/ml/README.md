@@ -30,13 +30,15 @@ El URI estable del modelo servido es
 
 - `read_features()` delega la lectura al feature store mediante `FeatureReader`.
 - `train()` entrena el baseline LightGBM global (F3-13).
-- `create_tracking_client()` define el cliente de runs de F3-14.
+- `create_tracking_client()` y `record_training_run()` registran cada
+  entrenamiento en MLflow (F3-14).
 - `create_registry_client()` y `promote_champion()` definen el registry de F3-16.
 - `load_champion()` y `predict()` definen el runtime de inferencia de F3-18.
 
-Las implementaciones diferidas fallan explícitamente con `NotImplementedError`
-hasta que aterrice el issue correspondiente; sus firmas quedan disponibles para
-que API y Data integren el paquete sin duplicar contratos.
+Las implementaciones aún diferidas (registry de F3-16, inferencia de F3-18)
+fallan explícitamente con `NotImplementedError` hasta que aterrice su issue; sus
+firmas quedan disponibles para que API y Data integren el paquete sin duplicar
+contratos.
 
 ## Entrenamiento local (F3-13)
 
@@ -71,6 +73,35 @@ huella del dataset (filas, pozos, cortes, horizontes), parámetros, métricas y
 versiones de código (`PETROCAST_GIT_SHA` se registra si está en el entorno).
 Contra el warehouse real, el extract de features llega con la materialización
 de F3-12; el tracking en MLflow con F3-14.
+
+## Tracking de experimentos (F3-14)
+
+Cada entrenamiento puede registrarse en MLflow con el flag `--track`. El
+pipeline (`train()`) sigue **puro y determinístico**: el logging vive en
+`tracking.py` y se dispara solo desde el CLI, así los smokes offline no
+necesitan servidor. Requiere `MLFLOW_TRACKING_URI` apuntando al servidor
+(contrato C); el SHA de código se toma de `PETROCAST_GIT_SHA`.
+
+```bash
+export MLFLOW_TRACKING_URI=http://localhost:5000
+export PETROCAST_GIT_SHA=$(git rev-parse HEAD)
+uv run python -m petrocast_ml.training \
+  --features-csv tests/fixtures/well_features.csv \
+  --production-csv tests/fixtures/production_monthly.csv \
+  --as-of 2026-01-01 --horizons 1,2,3 \
+  --output-dir ./artifacts/baseline --track
+```
+
+Cada run registra: **parámetros** (hiperparámetros efectivos de LightGBM +
+horizonte y huella del dataset), **métricas** (`model_mae_m3`, `model_rmse_m3`,
+`naive_mae_m3`, `naive_rmse_m3` y conteos de filas), los **tags obligatorios del
+contrato C** (`as_of_date`, `features_version`, `git_commit`) y los **artefactos**
+`model.txt` + `metadata.json`. El run se nombra `<as_of_date>-h<horizonte>`, de
+modo que dos cortes aparecen como dos runs distinguibles.
+
+Para la demo: abrir la UI de MLflow en `MLFLOW_TRACKING_URI`, entrar al
+experimento `petrocast-production-forecast` y comparar runs filtrando por el tag
+`as_of_date` (`tags.as_of_date = '2026-01-01'`).
 
 ## Verificación
 
