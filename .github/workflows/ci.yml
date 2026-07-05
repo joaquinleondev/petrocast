@@ -160,13 +160,14 @@ jobs:
       # cutoff, then run the PIT test over it: a leak of on/after-cutoff months now
       # makes the persisted features diverge from the strict recomputation and the
       # test fails. delete+insert leaves the default-cutoff snapshot from the step
-      # above intact, so both cutoffs stay covered. The test is named explicitly so
-      # it runs regardless of indirect-selection defaults.
-      - name: Build + PIT-test dbt features at a historical cutoff
+      # above intact, so both cutoffs stay covered. The Dagster asset executes dbt
+      # build, including the feature model's tests, for this partition.
+      - name: Materialize + PIT-test features through Dagster
         run: |
-          uv run dbt build --project-dir dbt --profiles-dir dbt \
-            --select well_features assert_well_features_point_in_time \
-            --vars '{as_of_date: "2015-06-01"}'
+          uv run dagster asset materialize \
+            --module-name petrocast_data.definitions \
+            --select "features/well_features" \
+            --partition 2015-06-01
       - name: Generate dbt docs (lineage artifacts)
         run: uv run dbt docs generate --project-dir dbt --profiles-dir dbt
       - name: Upload dbt lineage artifacts (for DataHub / F2-21)
