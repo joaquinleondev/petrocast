@@ -52,5 +52,16 @@ strict = true
 files = ["src"]
 plugins = ["pydantic.mypy"]
 
+# lightgbm ships no type stubs; keep strict everywhere else.
+[[tool.mypy.overrides]]
+module = ["lightgbm", "lightgbm.*"]
+ignore_missing_imports = true
+
+# LGBMRegressor/Booster methods are untyped (lightgbm ships no stubs); allow
+# calling them from the modules that touch the estimator directly.
+[[tool.mypy.overrides]]
+module = ["petrocast_ml.training.model", "petrocast_ml.training.pipeline", "petrocast_ml.training.artifact"]
+disallow_untyped_calls = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
