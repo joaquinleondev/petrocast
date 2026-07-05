@@ -73,7 +73,7 @@ shut-in no entran al fit, estándar DCA), con `t` = meses desde el primer mes ob
 | # | Regla | Umbral default | Bloqueante |
 |---|---|---|---|
 | 1 | mediana de MASE por pozo | `< 1.0` | sí |
-| 2 | `Σ|err_modelo| ≤ Σ|err_naive|` sobre filas test evaluables de pozos elegibles (MAE agregado) | ratio `≤ 1.0` | sí |
+| 2 | `Σ\|err_modelo\| ≤ Σ\|err_naive\|` sobre filas test evaluables de pozos elegibles (MAE agregado) | ratio `≤ 1.0` | sí |
 | 3 | mediana MAPE-no-cero modelo ≤ mediana Arps + margen | `+2 pp` | no (informativo) |
 
 `GateThresholds(mase_median_max=1.0, naive_mae_ratio_max=1.0, arps_mape_margin_pp=2.0)` —

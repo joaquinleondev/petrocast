@@ -22,9 +22,11 @@
 ### Task 1: Dependencia scipy + override mypy
 
 **Files:**
+
 - Modify: `apps/ml/pyproject.toml`
 
 **Interfaces:**
+
 - Produces: `scipy.optimize.curve_fit` importable; mypy no exige stubs de scipy.
 
 - [ ] **Step 1: Agregar dependencia y override**
@@ -61,11 +63,13 @@ git commit -m "build(ml): add scipy dependency for Arps fitting [F3-15]"
 ### Task 2: `evaluation/metrics.py`
 
 **Files:**
+
 - Create: `apps/ml/src/petrocast_ml/evaluation/__init__.py` (temporal, vacío con docstring; el orquestador llega en Task 6)
 - Create: `apps/ml/src/petrocast_ml/evaluation/metrics.py`
 - Test: `apps/ml/tests/unit/test_evaluation_metrics.py`
 
 **Interfaces:**
+
 - Consumes: `NAIVE_COLUMN`, `TARGET_COLUMN` de `petrocast_ml.training.dataset`; fixtures `production_monthly`, `expected_naive_backtest` del conftest.
 - Produces: `PREDICTION_COLUMN: str`, `MIN_HISTORY_MONTHS: int`, `eligible_wells(production, *, as_of_date) -> list[str]`, `one_step_naive_mae(production, *, as_of_date) -> pd.Series` (index well_id), `per_well_metrics(test, *, insample_naive_mae) -> pd.DataFrame` (index well_id; columnas `model_mae_m3`, `model_rmse_m3`, `naive_mae_m3`, `mape_nonzero_pct`, `mase`; NaN = indefinido), `distribution(values) -> dict[str, float]` (`p50/p75/p90`, `{}` si vacío).
 
@@ -316,10 +320,12 @@ git commit -m "feat(ml): per-well backtesting metrics with MASE and eligibility 
 ### Task 3: `evaluation/arps.py`
 
 **Files:**
+
 - Create: `apps/ml/src/petrocast_ml/evaluation/arps.py`
 - Test: `apps/ml/tests/unit/test_arps.py`
 
 **Interfaces:**
+
 - Produces: `MIN_POSITIVE_POINTS: int = 6`, `ArpsFit(qi, di, b, t0_month)` (frozen dataclass), `fit_well(production_train) -> ArpsFit | None`, `forecast(fit, target_months) -> NDArray[np.float64]`.
 
 - [ ] **Step 1: Failing tests**
@@ -502,11 +508,13 @@ git commit -m "feat(ml): best-effort Arps decline baseline via scipy [F3-15]"
 ### Task 4: `evaluation/gates.py` + `evaluation/report.py`
 
 **Files:**
+
 - Create: `apps/ml/src/petrocast_ml/evaluation/gates.py`
 - Create: `apps/ml/src/petrocast_ml/evaluation/report.py`
 - Test: `apps/ml/tests/unit/test_gates.py`
 
 **Interfaces:**
+
 - Produces (gates): `MASE_MEDIAN_GATE = "mase_median"`, `NAIVE_MAE_GATE = "mae_vs_naive"`, `ARPS_MAPE_GATE = "mape_vs_arps"`, `GateThresholds(mase_median_max=1.0, naive_mae_ratio_max=1.0, arps_mape_margin_pp=2.0)`, `GateResult(name, value: float | None, threshold, passed: bool | None, blocking)`, `evaluate_gates(*, mase_median, naive_mae_ratio, arps_mape_gap_pp, thresholds) -> tuple[GateResult, ...]`, `gates_passed(gates) -> bool`.
 - Produces (report): `EVALUATION_FILE = "evaluation.json"`, `EvaluationReport` frozen dataclass con campos `as_of_date, horizons, thresholds, wells_in_test, wells_eligible, wells_excluded_short_history, wells_mase_undefined, arps_fitted_wells, arps_failed_wells, arps_degraded, model_mae_m3, naive_mae_m3, distributions, gates, gates_passed` y métodos `to_dict() -> dict[str, Any]` (JSON-safe) y `to_mlflow_metrics() -> dict[str, float]` (todo prefijo `eval_`).
 
@@ -821,10 +829,12 @@ git commit -m "feat(ml): promotion gates and evaluation report projections [F3-1
 ### Task 5: Orquestador `evaluate()`
 
 **Files:**
+
 - Modify: `apps/ml/src/petrocast_ml/evaluation/__init__.py` (reemplaza placeholder)
 - Test: `apps/ml/tests/unit/test_evaluation.py`
 
 **Interfaces:**
+
 - Consumes: todo lo de Tasks 2–4; `temporal_split`, `prepare_model_input`, `TrainableModel`, `TrainingRequest`.
 - Produces: `evaluate(model, dataset, production, *, request, thresholds=None) -> EvaluationReport`; constante `ARPS_MIN_FITTED_SHARE = 0.5`; re-exporta `EvaluationReport, GateThresholds, GateResult, EVALUATION_FILE, evaluate`.
 
@@ -1131,10 +1141,12 @@ git commit -m "feat(ml): evaluate() orchestrator with gates over the test split 
 ### Task 6: Tracking de la evaluación en el mismo run MLflow
 
 **Files:**
+
 - Modify: `apps/ml/src/petrocast_ml/tracking.py`
 - Test: `apps/ml/tests/unit/test_tracking.py` (extender)
 
 **Interfaces:**
+
 - Consumes: `EvaluationReport.to_mlflow_metrics()`, `.gates_passed`.
 - Produces: `record_training_run(..., evaluation: EvaluationReport | None = None)`; constante `GATES_PASSED_TAG = "gates_passed"`.
 
@@ -1278,11 +1290,13 @@ git commit -m "feat(ml): log evaluation metrics and gate tag on the training run
 ### Task 7: Wiring del CLI + smokes de exit code
 
 **Files:**
+
 - Modify: `apps/ml/src/petrocast_ml/training/__main__.py`
 - Modify: `apps/ml/README.md` (sección corta de evaluación/gates)
 - Test: `apps/ml/tests/smoke/test_evaluation_cli.py`
 
 **Interfaces:**
+
 - Consumes: `evaluate`, `EVALUATION_FILE`, `EvaluationReport`.
 - Produces: CLI que siempre evalúa tras entrenar; stdout JSON con claves nuevas `evaluation` (payload de `to_dict()`) y `gates_passed`; `evaluation.json` en el artifact dir; exit code 1 cuando `gates_passed` es falso.
 
