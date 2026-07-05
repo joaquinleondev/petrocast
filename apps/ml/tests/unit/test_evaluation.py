@@ -86,6 +86,20 @@ def test_no_eligible_wells_raises(
         evaluate(StubModel(np.zeros(test_rows)), dataset, truncated, request=request_eval)
 
 
+def test_raises_when_mase_defined_for_too_few_wells(
+    dataset: pd.DataFrame, production_monthly: pd.DataFrame, request_eval: TrainingRequest
+) -> None:
+    # Flatten 2 of the 3 eligible wells' pre-cutoff series: a constant series has
+    # a zero one-step naive MAE, so MASE is undefined for them. Only 1/3 eligible
+    # wells keeps a defined MASE (< 50%), so gate 1 has too thin a base and the
+    # evaluation must fail loudly rather than hand down a sliver-backed verdict.
+    flat = production_monthly.copy()
+    flat.loc[flat["well_id"].isin(["70002", "70004"]), "oil_prod_m3"] = 100.0
+    test_rows = int((dataset["as_of_date"] == pd.Timestamp("2026-01-01")).sum())
+    with pytest.raises(ValueError, match="representative portfolio verdict"):
+        evaluate(StubModel(np.zeros(test_rows)), dataset, flat, request=request_eval)
+
+
 def test_report_distributions_cover_contract_metrics(
     dataset: pd.DataFrame, production_monthly: pd.DataFrame, request_eval: TrainingRequest
 ) -> None:

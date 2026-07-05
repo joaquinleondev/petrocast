@@ -45,7 +45,9 @@ def _months_since(months: pd.Series, origin: pd.Timestamp) -> NDArray[np.float64
 
 def fit_well(production_train: pd.DataFrame) -> ArpsFit | None:
     """Fit one well's pre-cutoff series; ``None`` whenever it is not fittable."""
-    observed = production_train.loc[production_train["oil_prod_m3"].notna()]
+    observed = production_train.loc[production_train["oil_prod_m3"].notna()].sort_values(
+        "production_month"
+    )
     positive = observed.loc[observed["oil_prod_m3"] > 0]
     if len(positive) < MIN_POSITIVE_POINTS:
         return None
@@ -53,6 +55,8 @@ def fit_well(production_train: pd.DataFrame) -> ArpsFit | None:
     t0 = pd.Timestamp(observed["production_month"].min())
     t = _months_since(positive["production_month"], t0)
     q = positive["oil_prod_m3"].to_numpy(dtype=np.float64)
+    # observed is sorted by month above, so the tail is the most recent year — a
+    # sane qi seed for curve_fit regardless of the row order the caller passed in.
     recent_peak = float(q[-12:].max())
     try:
         params, _ = curve_fit(

@@ -39,6 +39,12 @@ from petrocast_ml.training.model import prepare_model_input
 #: evaluated" (issue fallback) instead of pretending a partial baseline.
 ARPS_MIN_FITTED_SHARE = 0.5
 
+#: Gate 1 reads the median MASE, defined only for wells whose pre-cutoff series
+#: varies (a flat series has a zero one-step naive MAE → undefined MASE). Below
+#: this share of eligible wells we refuse the verdict instead of resting a
+#: portfolio gate on a sliver of wells — see ``evaluate``'s loud-failure contract.
+MASE_MIN_DEFINED_SHARE = 0.5
+
 
 def evaluate(
     model: TrainableModel,
@@ -51,9 +57,10 @@ def evaluate(
     """Backtest ``model`` on the request's single-origin test split (contract F).
 
     Raises:
-        ValueError: when no eligible well is evaluable, or MASE is undefined
-            for every eligible well — an evaluation without a verdict must
-            fail loudly, never pass silently.
+        ValueError: when no eligible well is evaluable, or fewer than
+            ``MASE_MIN_DEFINED_SHARE`` of the eligible wells have a defined
+            MASE — an evaluation without a representative verdict must fail
+            loudly, never pass silently.
     """
     thresholds = thresholds or GateThresholds()
     cutoff = pd.Timestamp(request.as_of_date)
@@ -74,8 +81,12 @@ def evaluate(
         evaluable, insample_naive_mae=one_step_naive_mae(production, as_of_date=cutoff)
     )
     mase = per_well["mase"].dropna()
-    if mase.empty:
-        raise ValueError("MASE undefined for every eligible well (flat pre-cutoff series)")
+    if len(mase) < MASE_MIN_DEFINED_SHARE * len(per_well):
+        raise ValueError(
+            f"MASE defined for only {len(mase)}/{len(per_well)} eligible wells "
+            f"(< {MASE_MIN_DEFINED_SHARE:.0%}); gate 1 would rest on too few wells "
+            "to be a representative portfolio verdict"
+        )
 
     arps_mape, fitted, failed = _arps_mape_per_well(evaluable, production, cutoff=cutoff)
     attempted = fitted + failed
@@ -154,6 +165,7 @@ def _arps_mape_per_well(
 __all__ = [
     "ARPS_MIN_FITTED_SHARE",
     "EVALUATION_FILE",
+    "MASE_MIN_DEFINED_SHARE",
     "EvaluationReport",
     "GateResult",
     "GateThresholds",
