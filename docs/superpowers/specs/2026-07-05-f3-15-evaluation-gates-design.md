@@ -44,10 +44,12 @@ métricas y gates; se reporta el conteo.
 restringidas al subconjunto evaluable (`naive_forecast_m3` no nulo, invariante del dataset):
 
 - `model_mae`, `model_rmse`, `naive_mae` en m³.
-- `MASE = model_mae / d`, con `d` = promedio de `|Y_t − Y_{t−1}|` sobre pares de meses
-  **calendario-consecutivos** observados del train (`production_month < as_of_date`).
-  `d = 0` o sin pares ⇒ MASE indefinido: el pozo sale de la distribución MASE y del gate 1;
-  se reporta `wells_mase_undefined`.
+- `MASE = model_mae / d`, con `d` = promedio de `|Y_t − Y_{t−1}|` sobre **meses observados
+  sucesivos** del train en orden cronológico (`production_month < as_of_date`; los gaps de
+  calendario colapsan — convención congelada por el fixture `expected_naive_backtest.csv`
+  de F3-10, columna `naive_insample_mae_m3`). `d = 0` o < 2 observaciones ⇒ MASE
+  indefinido: el pozo sale de la distribución MASE y del gate 1; se reporta
+  `wells_mase_undefined`.
 - `MAPE-no-cero` = promedio de `|Y − ŷ| / Y` sobre filas test con `Y > 0`; sin filas
   positivas ⇒ indefinido para ese pozo.
 

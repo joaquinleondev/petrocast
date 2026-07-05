@@ -40,7 +40,7 @@ def _hyperbolic(t: NDArray[np.float64], qi: float, di: float, b: float) -> NDArr
 
 def _months_since(months: pd.Series, origin: pd.Timestamp) -> NDArray[np.float64]:
     absolute = months.dt.year.to_numpy() * 12 + months.dt.month.to_numpy()
-    return (absolute - (origin.year * 12 + origin.month)).astype(np.float64)
+    return np.asarray(absolute - (origin.year * 12 + origin.month), dtype=np.float64)
 
 
 def fit_well(production_train: pd.DataFrame) -> ArpsFit | None:

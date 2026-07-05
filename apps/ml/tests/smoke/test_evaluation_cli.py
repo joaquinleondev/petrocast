@@ -74,9 +74,7 @@ def test_cli_exits_1_when_the_naive_is_unbeatable(
     rigged_dir = tmp_path / "rigged"
     rigged_dir.mkdir()
     rigged.to_csv(rigged_dir / "production_monthly.csv", index=False)
-    (rigged_dir / "well_features.csv").write_text(
-        (fixtures_dir / "well_features.csv").read_text()
-    )
+    (rigged_dir / "well_features.csv").write_text((fixtures_dir / "well_features.csv").read_text())
 
     completed = _run_cli(rigged_dir, tmp_path)
     payload = json.loads(completed.stdout)

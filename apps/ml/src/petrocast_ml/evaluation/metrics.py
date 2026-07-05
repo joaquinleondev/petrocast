@@ -38,15 +38,13 @@ def eligible_wells(production: pd.DataFrame, *, as_of_date: pd.Timestamp) -> lis
 
 
 def one_step_naive_mae(production: pd.DataFrame, *, as_of_date: pd.Timestamp) -> pd.Series:
-    """MASE denominator per well: mean |Y_t − Y_{t−1}| over successive observed rows.
+    """MASE denominator per well: mean |Y_t - Y_{t-1}| over successive observed rows.
 
     Successive means successive observed months in chronological order —
     calendar gaps collapse (fixture-frozen convention). Wells with fewer than
     two observations produce no entry.
     """
-    observed = _observed_before(production, as_of_date).sort_values(
-        ["well_id", "production_month"]
-    )
+    observed = _observed_before(production, as_of_date).sort_values(["well_id", "production_month"])
     diffs = observed.groupby("well_id")["oil_prod_m3"].diff().abs()
     return diffs.groupby(observed["well_id"]).mean().dropna()
 
