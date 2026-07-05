@@ -57,6 +57,8 @@ plugins = ["pydantic.mypy"]
 module = ["lightgbm", "lightgbm.*"]
 ignore_missing_imports = true
 
+# LGBMRegressor/Booster methods are untyped (lightgbm ships no stubs); allow
+# calling them from the modules that touch the estimator directly.
 [[tool.mypy.overrides]]
 module = ["petrocast_ml.training.model", "petrocast_ml.training.pipeline", "petrocast_ml.training.artifact"]
 disallow_untyped_calls = false

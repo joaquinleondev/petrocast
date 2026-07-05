@@ -82,6 +82,10 @@ def test_training_smoke_end_to_end(
     reloaded = booster.predict(prepare_model_input(test_rows))
     assert len(reloaded) == len(test_rows)
     assert all(math.isfinite(value) for value in reloaded)
+    # The standalone booster reproduces the in-memory model exactly (guards
+    # against categorical-code drift in the saved model.txt).
+    in_memory = result.model.predict(prepare_model_input(test_rows))
+    assert reloaded == pytest.approx(in_memory)
 
 
 def test_training_is_deterministic(dataset: pd.DataFrame, request_smoke: TrainingRequest) -> None:

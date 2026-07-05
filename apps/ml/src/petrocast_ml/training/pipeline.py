@@ -47,6 +47,10 @@ def train(
     target series in m³. Split, fit and evaluation all happen against
     ``request.as_of_date`` as the single-origin test cutoff (contract F).
     """
+    if len(target) != len(features):
+        raise ValueError(
+            f"target length {len(target)} does not match features length {len(features)}"
+        )
     dataset = features.copy()
     dataset[TARGET_COLUMN] = target.to_numpy()
     split = temporal_split(dataset, request=request)
@@ -60,11 +64,17 @@ def train(
 
 def _evaluate(model: Any, split: TemporalSplit) -> dict[str, float]:
     test = split.test
-    predicted = np.asarray(model.predict(prepare_model_input(test)), dtype=float)
-    model_errors = test[TARGET_COLUMN] - predicted
-    # Persistence baseline on exactly the same rows: missing naive (well with no
-    # pre-cutoff history) cannot happen for store-backed rows, but guard anyway.
-    naive_errors = (test[TARGET_COLUMN] - test[NAIVE_COLUMN]).dropna()
+    predicted = pd.Series(
+        np.asarray(model.predict(prepare_model_input(test)), dtype=float),
+        index=test.index,
+    )
+    # Score model and naive on exactly the same rows (dataset invariant): a well
+    # with no pre-cutoff history has a NaN persistence baseline and cannot be
+    # compared, so both metrics use the naive-evaluable subset. The full held-out
+    # count still surfaces in ``test_rows``.
+    evaluable = test[NAIVE_COLUMN].notna()
+    model_errors = (test[TARGET_COLUMN] - predicted)[evaluable]
+    naive_errors = (test[TARGET_COLUMN] - test[NAIVE_COLUMN])[evaluable]
 
     return {
         "model_mae_m3": _mae(model_errors),
