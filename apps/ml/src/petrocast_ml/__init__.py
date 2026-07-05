@@ -20,7 +20,12 @@ from petrocast_ml.registry import (
     create_registry_client,
     promote_champion,
 )
-from petrocast_ml.tracking import RunMetadata, TrackingClient, create_tracking_client
+from petrocast_ml.tracking import (
+    RunMetadata,
+    TrackingClient,
+    create_tracking_client,
+    record_training_run,
+)
 from petrocast_ml.training import TrainableModel, TrainingRequest, TrainingResult, train
 
 __all__ = [
@@ -48,6 +53,7 @@ __all__ = [
     "predict",
     "promote_champion",
     "read_features",
+    "record_training_run",
     "train",
     "validate_feature_frame",
 ]
