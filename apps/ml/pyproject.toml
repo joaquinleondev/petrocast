@@ -14,6 +14,7 @@ dependencies = [
     "pydantic-settings>=2.10.0,<3.0.0",
     "pyarrow>=23.0.1,<25.0.0",
     "scikit-learn>=1.6.0,<2.0.0",
+    "scipy>=1.13,<2.0",
 ]
 
 [dependency-groups]
@@ -62,6 +63,11 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["petrocast_ml.training.model", "petrocast_ml.training.pipeline", "petrocast_ml.training.artifact"]
 disallow_untyped_calls = false
+
+# scipy ships partial type annotations; curve_fit and friends stay untyped.
+[[tool.mypy.overrides]]
+module = ["scipy", "scipy.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

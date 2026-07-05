@@ -103,6 +103,22 @@ Para la demo: abrir la UI de MLflow en `MLFLOW_TRACKING_URI`, entrar al
 experimento `petrocast-production-forecast` y comparar runs filtrando por el tag
 `as_of_date` (`tags.as_of_date = '2026-01-01'`).
 
+## Evaluación y gates de calidad (F3-15)
+
+Cada corrida de `python -m petrocast_ml.training` backtestea el modelo sobre el
+corte single-origin (contrato F, ADR-0030): MAE/RMSE/MASE + MAPE-no-cero en
+distribución por pozo (p50/p75/p90), contra la **naive de persistencia**
+(baseline del gate) y contra **Arps** best-effort (comparación de industria,
+informativa). Pozos con menos de 12 meses observados antes del corte quedan
+fuera de métricas y gates.
+
+Gates bloqueantes (umbrales de ADR-0030, configurables vía
+`evaluation.GateThresholds`): mediana de MASE por pozo `< 1.0` y MAE agregado
+del modelo `≤` MAE de la naive. Si alguno falla, el proceso termina con **exit
+code 1** — un run rojo no es promovible (#16). El reporte completo queda en
+`evaluation.json` junto al artifact y, con `--track`, como métricas `eval_*` y
+el tag `gates_passed` en el mismo run de MLflow.
+
 ## Verificación
 
 ```bash

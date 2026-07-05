@@ -6,6 +6,10 @@ LightGBM baseline against a single-origin cutoff and writes the artifact.
 Database-backed extraction arrives with the Dagster materialization (F3-12)
 and the serving runtime (F3-18); this entrypoint keeps training runnable and
 reproducible offline.
+
+Every run is backtested (F3-15): the evaluation report lands next to the
+artifact and a failed blocking gate turns into exit code 1 — the promotion
+chain must never see a red run as green.
 """
 
 import argparse
@@ -16,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from petrocast_ml.evaluation import EVALUATION_FILE, evaluate
 from petrocast_ml.tracking import RunMetadata, create_tracking_client, record_training_run
 from petrocast_ml.training.artifact import save_training_artifact
 from petrocast_ml.training.contracts import TrainingRequest
@@ -79,6 +84,9 @@ def main() -> None:
         result, request=request, dataset=dataset, output_dir=args.output_dir
     )
 
+    report = evaluate(result.model, dataset, production, request=request)
+    (artifact_dir / EVALUATION_FILE).write_text(json.dumps(report.to_dict(), indent=2))
+
     tracked_run: str | None = None
     if args.track:
         run_metadata = RunMetadata(
@@ -93,6 +101,7 @@ def main() -> None:
             dataset=dataset,
             run_metadata=run_metadata,
             artifact_dir=artifact_dir,
+            evaluation=report,
         )
 
     print(
@@ -100,10 +109,14 @@ def main() -> None:
             {
                 "artifact_dir": str(artifact_dir),
                 "metrics": dict(result.metrics),
+                "evaluation": report.to_dict(),
+                "gates_passed": report.gates_passed,
                 "tracked_run": tracked_run,
             }
         )
     )
+    if not report.gates_passed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
