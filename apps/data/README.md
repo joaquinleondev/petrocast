@@ -201,6 +201,26 @@ La unicidad de `(well_id, as_of_date)` se testea con
 `dbt_utils.unique_combination_of_columns`; grano, claves y unidades quedan
 documentados por columna en `models/features/schema.yml`.
 
+### Materializar features con Dagster
+
+El asset `features/well_features` usa particiones mensuales. Cada partición es
+el `as_of_date` del snapshot point-in-time y ejecuta un `dbt build` con esa
+fecha de corte:
+
+```bash
+uv run dagster asset materialize \
+  --module-name petrocast_data.definitions \
+  --select "features/well_features" \
+  --partition 2015-06-01
+```
+
+En la UI de Dagster, abrí el asset `features/well_features`, elegí
+**Materialize**, seleccioná el mes y lanzá el run. La materialización reintenta
+hasta tres veces con backoff exponencial y publica metadata con la cantidad de
+filas, el rango histórico usado, las variables dbt y un hash de configuración +
+SQL. Los backfills ejecutan una partición por run porque cada snapshot recibe un
+único `as_of_date`.
+
 ## Calidad de datos
 
 F2-17 agrega chequeos de calidad sobre la transición **Bronze → Silver**

@@ -54,5 +54,10 @@ ignore_missing_imports = true
 # The dbt/dlt/sensor decorators come from the untyped modules above; keep strict
 # mode for everything else in these files.
 [[tool.mypy.overrides]]
-module = ["petrocast_data.assets.dbt", "petrocast_data.assets.dlt", "petrocast_data.sensors"]
+module = [
+    "petrocast_data.assets.dbt",
+    "petrocast_data.assets.dlt",
+    "petrocast_data.assets.features",
+    "petrocast_data.sensors",
+]
 disallow_untyped_decorators = false

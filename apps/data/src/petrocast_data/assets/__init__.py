@@ -1,1 +1,1 @@
-"""Dagster assets for the Petrocast data stack."""
+"""Dagster asset modules for ingestion, transforms, and feature materialization."""

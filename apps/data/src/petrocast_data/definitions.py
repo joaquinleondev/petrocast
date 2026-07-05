@@ -9,6 +9,7 @@ from petrocast_data.assets.dbt import (
     silver_dbt_assets,
 )
 from petrocast_data.assets.dlt import petrocast_bronze_dlt_assets, petrocast_smoke_dlt_assets
+from petrocast_data.assets.features import feature_dbt_assets
 from petrocast_data.assets.warehouse import warehouse_schemas_ready
 from petrocast_data.resources import WebhookNotificationResource
 from petrocast_data.sensors import quality_block_notification
@@ -21,6 +22,7 @@ defs = dg.Definitions(
         dbt_smoke_assets,
         silver_dbt_assets,
         gold_dbt_assets,
+        feature_dbt_assets,
     ],
     sensors=[quality_block_notification],
     resources={
