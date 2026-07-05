@@ -3,6 +3,17 @@ from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
+from petrocast_ml.features.contract import (
+    CONTRACT_COLUMNS,
+    CONTRACT_SCHEMA,
+    FEATURE_COLUMNS,
+    FEATURE_SCHEMA,
+    KEY_COLUMNS,
+    KEY_SCHEMA,
+    FeatureKind,
+    validate_feature_frame,
+)
+
 
 @runtime_checkable
 class FeatureReader(Protocol):
@@ -23,4 +34,15 @@ def read_features(
     return reader.read(well_id=well_id, as_of_date=as_of_date)
 
 
-__all__ = ["FeatureReader", "read_features"]
+__all__ = [
+    "CONTRACT_COLUMNS",
+    "CONTRACT_SCHEMA",
+    "FEATURE_COLUMNS",
+    "FEATURE_SCHEMA",
+    "KEY_COLUMNS",
+    "KEY_SCHEMA",
+    "FeatureKind",
+    "FeatureReader",
+    "read_features",
+    "validate_feature_frame",
+]
