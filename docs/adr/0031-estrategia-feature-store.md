@@ -1,6 +1,6 @@
 # ADR-0031: Estrategia de feature store
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-07-02
 - **Autores:** Ignacio Vargas Fernandez
 - **Decisores:** Equipo Petrocast

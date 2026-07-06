@@ -1,6 +1,6 @@
 # ADR-0024: Modelo dimensional del gold — star schema
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-08
 - **Autores:** Ignacio Vargas Fernández
 - **Decisores:** Equipo Petrocast

@@ -1,6 +1,6 @@
 # ADR-0035: CI/CD de pipelines ML y promoción de artefactos
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-07-02
 - **Autores:** Santino Domato
 - **Decisores:** Equipo Petrocast

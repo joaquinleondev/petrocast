@@ -1,6 +1,6 @@
 # ADR-0032: Tracking de experimentos y registry de modelos con MLflow
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-28
 - **Autores:** Joaquin Leon Alderete
 - **Decisores:** Equipo Petrocast

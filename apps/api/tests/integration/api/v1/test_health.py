@@ -1,3 +1,6 @@
+from src.core import serving
+
+
 def test_health_live_returns_200_without_auth(client):
     response = client.get("/health/live")
     assert response.status_code == 200
@@ -23,3 +26,14 @@ def test_health_deep_returns_rich_payload(client, auth_headers):
     assert "version" in body
     assert "uptime_seconds" in body
     assert "checks" in body
+
+
+def test_health_deep_reports_real_model_serving_state(client, auth_headers):
+    serving._load_cached_champion.cache_clear()
+
+    response = client.get("/health/deep", headers=auth_headers)
+
+    assert response.status_code == 200
+    checks = response.json()["checks"]
+    assert "forecast_engine" not in checks
+    assert checks["model_serving"]["status"] == "not_loaded"

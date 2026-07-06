@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from src.api.deps import verify_api_key
+from src.core.serving import champion_health
 
 router = APIRouter()
 
@@ -37,6 +38,6 @@ def health_deep() -> dict[str, Any]:
         "deployed_at": os.getenv("BUILD_CREATED", _STARTED_AT_ISO),
         "uptime_seconds": int(time.monotonic() - _STARTED_AT),
         "checks": {
-            "forecast_engine": {"status": "ok", "version": "0.1.0-mock"},
+            "model_serving": champion_health(),
         },
     }

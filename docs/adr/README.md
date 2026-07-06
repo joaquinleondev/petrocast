@@ -54,17 +54,17 @@ Si la decisión es trivial o fácilmente reversible, **no** escribas un ADR.
 | [0019](./0019-infraestructura-terraform-aws.md)           | Terraform AWS por ambiente               | Aceptado | 2026-04-21 |
 | [0020](./0020-estructura-directorios-backend.md)          | Estructura directorios backend           | Aceptado | 2026-04-22 |
 | [0021](./0021-observabilidad-local-fase1.md)              | Observabilidad local Fase 1              | Aceptado | 2026-04-23 |
-| [0022](./0022-gobierno-datos-linaje-datahub.md)           | Gobierno de datos y linaje con DataHub   | Propuesto | 2026-06-08 |
-| [0023](./0023-arquitectura-medallion-dbt.md)              | Arquitectura medallion y motor dbt Core v2 | Propuesto | 2026-06-08 |
-| [0024](./0024-modelo-dimensional-star-schema.md)          | Modelo dimensional gold (star schema)    | Propuesto | 2026-06-08 |
-| [0025](./0025-calidad-datos-consecuencia.md)              | Calidad de datos y consecuencia operativa | Propuesto | 2026-06-08 |
-| [0026](./0026-tipo-carga-medallion.md)                    | Tipo de carga por capa medallion         | Propuesto | 2026-06-10 |
-| [0027](./0027-topologia-despliegue-fase2.md)              | Topología de despliegue de Fase 2        | Propuesto | 2026-06-10 |
-| [0028](./0028-orquestacion-e-ingesta-dagster-dlt.md)      | Orquestación con Dagster e ingesta con dlt | Propuesto | 2026-06-08 |
-| [0029](./0029-plataforma-bi-metabase.md)                  | Plataforma de BI con Metabase OSS        | Propuesto | 2026-06-12 |
-| [0030](./0030-objetivo-predictivo-horizonte-metricas.md) | Objetivo predictivo, horizonte y métricas | Propuesto | 2026-07-01 |
-| [0031](./0031-estrategia-feature-store.md)               | Estrategia de feature store              | Propuesto | 2026-07-02 |
-| [0032](./0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry MLflow | Propuesto | 2026-06-28 |
-| [0033](./0033-orquestacion-entrenamiento-retraining.md)  | Orquestación de training y retraining    | Propuesto | 2026-07-02 |
-| [0034](./0034-serving-modelo-contrato-api.md)            | Serving embebido en FastAPI y contrato API | Propuesto | 2026-06-28 |
-| [0035](./0035-cicd-pipelines-ml-promocion.md)            | CI/CD de pipelines ML y promoción        | Propuesto | 2026-07-02 |
+| [0022](./0022-gobierno-datos-linaje-datahub.md)           | Gobierno de datos y linaje con DataHub   | Aceptado  | 2026-06-08 |
+| [0023](./0023-arquitectura-medallion-dbt.md)              | Arquitectura medallion y motor dbt Core v2 | Aceptado  | 2026-06-08 |
+| [0024](./0024-modelo-dimensional-star-schema.md)          | Modelo dimensional gold (star schema)    | Aceptado  | 2026-06-08 |
+| [0025](./0025-calidad-datos-consecuencia.md)              | Calidad de datos y consecuencia operativa | Aceptado  | 2026-06-08 |
+| [0026](./0026-tipo-carga-medallion.md)                    | Tipo de carga por capa medallion         | Aceptado  | 2026-06-10 |
+| [0027](./0027-topologia-despliegue-fase2.md)              | Topología de despliegue de Fase 2        | Aceptado  | 2026-06-10 |
+| [0028](./0028-orquestacion-e-ingesta-dagster-dlt.md)      | Orquestación con Dagster e ingesta con dlt | Aceptado  | 2026-06-08 |
+| [0029](./0029-plataforma-bi-metabase.md)                  | Plataforma de BI con Metabase OSS        | Aceptado  | 2026-06-12 |
+| [0030](./0030-objetivo-predictivo-horizonte-metricas.md) | Objetivo predictivo, horizonte y métricas | Aceptado  | 2026-07-01 |
+| [0031](./0031-estrategia-feature-store.md)               | Estrategia de feature store              | Aceptado  | 2026-07-02 |
+| [0032](./0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry MLflow | Aceptado  | 2026-06-28 |
+| [0033](./0033-orquestacion-entrenamiento-retraining.md)  | Orquestación de training y retraining    | Aceptado  | 2026-07-02 |
+| [0034](./0034-serving-modelo-contrato-api.md)            | Serving embebido en FastAPI y contrato API | Aceptado  | 2026-06-28 |
+| [0035](./0035-cicd-pipelines-ml-promocion.md)            | CI/CD de pipelines ML y promoción        | Aceptado  | 2026-07-02 |

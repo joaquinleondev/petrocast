@@ -1,6 +1,6 @@
 # ADR-0026: Tipo de carga por capa en la arquitectura medallion
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-10
 - **Autores:** Santino Domato
 - **Decisores:** Equipo Petrocast

@@ -1,6 +1,6 @@
 # ADR-0022: Gobierno de datos y linaje con DataHub
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-08
 - **Autores:** Equipo Petrocast
 - **Decisores:** Equipo Petrocast
