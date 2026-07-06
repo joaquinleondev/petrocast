@@ -165,9 +165,7 @@ class MlflowModelRegistry:
         gates_passed = _parse_required_gate(run.data.tags)
         model_source = source or run.data.tags.get(LOGGED_MODEL_URI_TAG)
         if model_source is None:
-            raise CandidateMetadataError(
-                f"run is missing required tag {LOGGED_MODEL_URI_TAG!r}"
-            )
+            raise CandidateMetadataError(f"run is missing required tag {LOGGED_MODEL_URI_TAG!r}")
         metrics = {str(key): float(value) for key, value in run.data.metrics.items()}
         self._ensure_registered_model(name)
         version = self._client.create_model_version(

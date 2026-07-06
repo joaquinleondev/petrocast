@@ -3,18 +3,24 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
 from petrocast_ml import MlSettings
 from petrocast_ml.registry import (
+    METRIC_TAG_PREFIX,
     CandidateMetadataError,
     CandidateNotApprovedError,
     ModelRegistry,
     ModelVersion,
+    _normalize_version,
+    _parse_required_date,
+    _parse_required_gate,
     promote_champion,
     register_candidate,
 )
+from petrocast_ml.tracking import AS_OF_DATE_TAG, GATES_PASSED_TAG
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,3 +208,59 @@ def test_rollback_repromotes_the_previous_approved_version() -> None:
 
     assert rolled_back == first
     assert registry.get_by_alias(name="petrocast-test", alias="champion") == first
+
+
+def _mlflow_version_stub(**overrides: object) -> SimpleNamespace:
+    """A minimal ``MlflowModelVersion`` stand-in for the pure normalizer."""
+    fields: dict[str, object] = {
+        "name": "petrocast-test",
+        "version": 1,
+        "source": "runs:/run-1/model",
+        "run_id": "run-1",
+        "tags": {AS_OF_DATE_TAG: "2026-01-01", GATES_PASSED_TAG: "true"},
+    }
+    fields.update(overrides)
+    return SimpleNamespace(**fields)
+
+
+def test_parse_required_date_rejects_a_missing_tag() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _parse_required_date({})
+
+
+def test_parse_required_date_rejects_a_non_iso_value() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _parse_required_date({AS_OF_DATE_TAG: "not-a-date"})
+
+
+def test_parse_required_gate_rejects_a_missing_tag() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _parse_required_gate({})
+
+
+def test_parse_required_gate_rejects_an_unexpected_value() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _parse_required_gate({GATES_PASSED_TAG: "maybe"})
+
+
+def test_normalize_version_rejects_a_missing_run_id() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _normalize_version(_mlflow_version_stub(run_id=None))
+
+
+def test_normalize_version_rejects_a_missing_source() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _normalize_version(_mlflow_version_stub(source=None))
+
+
+def test_normalize_version_rejects_a_non_numeric_metric_tag() -> None:
+    with pytest.raises(CandidateMetadataError):
+        _normalize_version(
+            _mlflow_version_stub(
+                tags={
+                    AS_OF_DATE_TAG: "2026-01-01",
+                    GATES_PASSED_TAG: "true",
+                    f"{METRIC_TAG_PREFIX}eval_model_mae_m3": "not-a-number",
+                }
+            )
+        )
