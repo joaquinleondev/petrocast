@@ -19,6 +19,7 @@ from petrocast_ml.tracking import (
     AS_OF_DATE_TAG,
     FEATURES_VERSION_TAG,
     GIT_COMMIT_TAG,
+    LOGGED_MODEL_URI_TAG,
     MlflowTrackingClient,
     RunMetadata,
     create_tracking_client,
@@ -49,8 +50,9 @@ def test_mlflow_client_persists_run_to_file_store(
     # MLFLOW_TRACKING_URI at the Postgres-backed server).
     monkeypatch.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
     store = tmp_path / "mlruns"
+    tracking_uri = store.as_uri()
     settings = MlSettings(
-        mlflow_tracking_uri=str(store),
+        mlflow_tracking_uri=tracking_uri,
         mlflow_experiment_name=EXPERIMENT_NAME,
     )
     dataset = build_training_dataset(well_features, production_monthly, horizons=(1, 2, 3))
@@ -74,7 +76,7 @@ def test_mlflow_client_persists_run_to_file_store(
         artifact_dir=artifact_dir,
     )
 
-    reader = MlflowClient(tracking_uri=str(store))
+    reader = MlflowClient(tracking_uri=tracking_uri)
     experiment = reader.get_experiment_by_name(EXPERIMENT_NAME)
     assert experiment is not None
     runs = reader.search_runs([experiment.experiment_id])
@@ -85,6 +87,7 @@ def test_mlflow_client_persists_run_to_file_store(
     assert run.data.tags[FEATURES_VERSION_TAG] == "fixtures"
     assert run.data.tags[GIT_COMMIT_TAG] == "abc123"
     assert run.data.tags["mlflow.runName"] == run_name
+    assert run.data.tags[LOGGED_MODEL_URI_TAG].startswith("models:/m-")
 
     assert run.data.metrics["model_mae_m3"] == pytest.approx(result.metrics["model_mae_m3"])
     assert run.data.params["horizon"] == "3"
@@ -93,3 +96,6 @@ def test_mlflow_client_persists_run_to_file_store(
 
     artifacts = {item.path for item in reader.list_artifacts(run.info.run_id)}
     assert {MODEL_FILE, METADATA_FILE} <= artifacts
+    logged_models = reader.search_logged_models([experiment.experiment_id])
+    assert len(logged_models) == 1
+    assert f"models:/{logged_models[0].model_id}" == run.data.tags[LOGGED_MODEL_URI_TAG]

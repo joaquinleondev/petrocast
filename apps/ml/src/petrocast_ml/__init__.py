@@ -15,10 +15,15 @@ from petrocast_ml.features import (
 )
 from petrocast_ml.inference import PredictionModel, load_champion, predict
 from petrocast_ml.registry import (
+    CandidateMetadataError,
+    CandidateNotApprovedError,
+    MlflowModelRegistry,
     ModelRegistry,
     ModelVersion,
+    RegistryError,
     create_registry_client,
     promote_champion,
+    register_candidate,
 )
 from petrocast_ml.tracking import (
     RunMetadata,
@@ -35,12 +40,16 @@ __all__ = [
     "FEATURE_SCHEMA",
     "KEY_COLUMNS",
     "KEY_SCHEMA",
+    "CandidateMetadataError",
+    "CandidateNotApprovedError",
     "FeatureKind",
     "FeatureReader",
     "MlSettings",
+    "MlflowModelRegistry",
     "ModelRegistry",
     "ModelVersion",
     "PredictionModel",
+    "RegistryError",
     "RunMetadata",
     "TrackingClient",
     "TrainableModel",
@@ -54,6 +63,7 @@ __all__ = [
     "promote_champion",
     "read_features",
     "record_training_run",
+    "register_candidate",
     "train",
     "validate_feature_frame",
 ]
