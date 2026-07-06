@@ -48,7 +48,7 @@ run_training() {
   set +e
   output="$(
     cd "$ROOT_DIR/apps/ml" && \
-      python -m uv run python -m petrocast_ml.training \
+      uv run python -m petrocast_ml.training \
         --features-csv tests/fixtures/well_features.csv \
         --production-csv tests/fixtures/production_monthly.csv \
         --as-of 2026-01-01 \
@@ -86,7 +86,7 @@ tracking_runs() {
 api_offline() {
   echo "==> Running offline API scenarios through FastAPI TestClient"
   cd "$ROOT_DIR/apps/api"
-  python -m uv run pytest tests/integration/api/v1/test_prediction.py -q
+  uv run pytest tests/integration/api/v1/test_prediction.py -q
 }
 
 api_request() {
@@ -121,7 +121,7 @@ api_live() {
 retrain_cli() {
   echo "==> Triggering retraining_job asset chain for partition $PARTITION"
   cd "$ROOT_DIR/apps/data"
-  python -m uv run dagster asset materialize \
+  uv run dagster asset materialize \
     --module-name petrocast_data.definitions \
     --select "features/well_features,ml/training_candidate,ml/model_evaluation,ml/champion_promotion" \
     --partition "$PARTITION"

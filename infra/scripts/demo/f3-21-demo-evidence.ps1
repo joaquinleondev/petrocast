@@ -80,7 +80,11 @@ function Invoke-TrainingRun {
     Write-Host "==> Creating MLflow run: $Name (horizons=$Horizons)"
     Push-Location (Join-Path $rootDir "apps\ml")
     try {
-        $output = & python -m uv run python -m petrocast_ml.training `
+        # stderr merged via 2>&1 must not abort the run under Windows PowerShell 5.1,
+        # where ErrorActionPreference=Stop turns native stderr output into a terminating error.
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $output = & uv run python -m petrocast_ml.training `
             --features-csv tests/fixtures/well_features.csv `
             --production-csv tests/fixtures/production_monthly.csv `
             --as-of 2026-01-01 `
@@ -89,6 +93,7 @@ function Invoke-TrainingRun {
             --output-dir $outputDir `
             --track 2>&1
         $status = $LASTEXITCODE
+        $ErrorActionPreference = $previousErrorActionPreference
     }
     finally {
         Pop-Location
@@ -123,7 +128,7 @@ function Invoke-ApiOffline {
     Write-Host "==> Running offline API scenarios through FastAPI TestClient"
     Invoke-CheckedCommand `
         -WorkingDirectory (Join-Path $rootDir "apps\api") `
-        -CommandArgs @("python", "-m", "uv", "run", "pytest", "tests/integration/api/v1/test_prediction.py", "-q")
+        -CommandArgs @("uv", "run", "pytest", "tests/integration/api/v1/test_prediction.py", "-q")
 }
 
 function Invoke-ApiRequest {
@@ -161,7 +166,7 @@ function Invoke-RetrainCli {
     Invoke-CheckedCommand `
         -WorkingDirectory (Join-Path $rootDir "apps\data") `
         -CommandArgs @(
-            "python", "-m", "uv", "run", "dagster", "asset", "materialize",
+            "uv", "run", "dagster", "asset", "materialize",
             "--module-name", "petrocast_data.definitions",
             "--select", "features/well_features,ml/training_candidate,ml/model_evaluation,ml/champion_promotion",
             "--partition", $Partition
