@@ -42,6 +42,7 @@ for m in re.finditer(r'\]\(([^)]+)\)', f.read_text(encoding='utf-8')):
 print("MISSING:", missing) if missing else print("OK: todos los links relativos resuelven")
 PY
 ```
+
 Expected en cada uso: `OK: todos los links relativos resuelven`.
 
 ---
@@ -49,9 +50,11 @@ Expected en cada uso: `OK: todos los links relativos resuelven`.
 ## Task 1: Crear `docs/fase-3/README.md` (hub de Fase 3)
 
 **Files:**
+
 - Create: `docs/fase-3/README.md`
 
 **Interfaces:**
+
 - Consumes: docs existentes de Fase 3 — `docs/fase-3/model-card.md`, `docs/fase-3/backtesting-report.md`, `docs/fase-3/demo-tracking-api.md`; `docs/runbooks/ml-promotion.md`; `apps/ml/README.md`; ADRs `docs/adr/0030..0035-*.md`.
 - Produces: `docs/fase-3/README.md`, enlazado luego desde el README raíz (Task 3) y Fase 2 (Task 4).
 
@@ -194,10 +197,12 @@ git commit -m "docs(fase-3): agregar hub README de Fase 3 (arquitectura ML + gui
 ## Task 2: Poblar diagramas C4 con la vertical ML (F1+F2+F3)
 
 **Files:**
+
 - Modify: `docs/architecture/c4-context.md` (hoy vacío)
 - Modify: `docs/architecture/c4-containers.md` (hoy vacío)
 
 **Interfaces:**
+
 - Consumes: nada de tareas previas.
 - Produces: diagramas C4 poblados, ya enlazados desde el README raíz y Fase 2.
 
@@ -271,9 +276,11 @@ git commit -m "docs(architecture): poblar C4 de contexto y contenedores con la v
 ## Task 3: Actualizar `README.md` raíz
 
 **Files:**
+
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: `docs/fase-3/README.md` (Task 1) para el link de Documentación.
 - Produces: README raíz reflejando Fase 3 completa.
 
@@ -349,6 +356,7 @@ PARTITION=2026-01-01 infra/scripts/demo/f3-21-demo-evidence.sh retrain-cli
 curl -H "X-API-Key: abcdef12345" \
   "http://localhost:8000/api/v1/predictions?id_well=POZO-001&as_of_date=2024-03-15&horizon=3"
 ```
+
 ```
 
 - [ ] **Step 6: Verificar links del README raíz**
@@ -373,9 +381,11 @@ git commit -m "docs(readme): reflejar Fase 3 completa (descripción, estado, vid
 ## Task 4: Cross-link en Fase 2 + verificación final + PR
 
 **Files:**
+
 - Modify: `docs/fase-2/README.md`
 
 **Interfaces:**
+
 - Consumes: `docs/fase-3/README.md` (Task 1).
 - Produces: PR `Closes #127`.
 
@@ -395,6 +405,7 @@ Expected: `OK: todos los links relativos resuelven`.
 - [ ] **Step 3: Verificación global de todos los docs tocados**
 
 Run (desde la raíz):
+
 ```bash
 for f in README.md docs/fase-2/README.md docs/fase-3/README.md \
          docs/architecture/c4-context.md docs/architecture/c4-containers.md; do
@@ -409,6 +420,7 @@ print("MISSING:", missing) if missing else print("OK")
 PY
 done
 ```
+
 Expected: `OK` para los 5 archivos.
 
 - [ ] **Step 4: Commit**
@@ -442,6 +454,7 @@ PR=$(gh pr view --json number --jq .number)
 gh api --method POST "repos/joaquinleondev/petrocast/issues/$PR/labels" -f 'labels[]=docs' -f 'labels[]=demo' -f 'labels[]=arquitectura'
 gh api --method POST "repos/joaquinleondev/petrocast/issues/$PR/assignees" -f 'assignees[]=joaquinleondev'
 ```
+
 Expected: la PR queda con milestone M6, labels `docs`/`demo`/`arquitectura` y assignee. (Si `gh pr edit` falla por el bug de "projects classic" conocido en este repo, usar la API REST como arriba.)
 
 ---
