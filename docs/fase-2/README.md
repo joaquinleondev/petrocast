@@ -283,6 +283,7 @@ de ingesta individuales), ver
 | [`docs/architecture/c4-containers.md`](../architecture/c4-containers.md) | Diagrama C4 de contenedores |
 | [`docs/runbooks/`](../runbooks/) | Runbooks operativos (backfill, data engineer, etc.) |
 | [`docs/adr/README.md`](../adr/README.md) | Índice completo de ADRs |
+| [`docs/fase-3/README.md`](../fase-3/README.md) | Vertical de ML de Fase 3 (arquitectura, cómo correr, guion de video) |
 
 ### ADRs relevantes para Fase 2
 
