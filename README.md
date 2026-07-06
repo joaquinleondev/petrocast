@@ -31,7 +31,7 @@ Demo del proyecto disponible en YouTube: **TBD** (pendiente de grabación).
 ## Documentación
 
 - [Consigna de la materia (PRD y adendas)](docs/assignment/)
-- [PRD — Fase 2](docs/assignment/prd.md)
+- [PRD — Fase 2](docs/assignment/adenda-fase-2.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
 - [README de Fase 2](docs/fase-2/README.md)
