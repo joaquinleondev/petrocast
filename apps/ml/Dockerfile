@@ -53,8 +53,10 @@ COPY --chown=app:app ml/tests/fixtures ./tests/fixtures
 
 USER 10001
 
-# Default smoke: importing the package exercises the lightgbm/libgomp load.
-# Offline training smoke inside the image:
+# Default health-check (exit 0): importing the package exercises the
+# lightgbm/libgomp load. Offline training pipeline inside the image (see
+# README "Imagen y CI/CD"): runs end-to-end but exits 1 by design — the toy
+# fixtures can't beat the naive baseline, so the quality gates reject them.
 #   docker run --rm petrocast-ml:dev python -m petrocast_ml.training \
 #     --features-csv tests/fixtures/well_features.csv \
 #     --production-csv tests/fixtures/production_monthly.csv \

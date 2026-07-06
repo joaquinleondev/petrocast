@@ -180,7 +180,7 @@ apps (ADR-0014). Se construye con contexto `apps/`, igual que `api` y `data`:
 docker build -t petrocast-ml:dev -f Dockerfile ..
 ```
 
-La imagen incluye los fixtures offline, así que el training smoke corre
+La imagen incluye los fixtures offline, así que el pipeline de training corre
 dentro del contenedor sin warehouse ni MLflow:
 
 ```bash
@@ -190,9 +190,18 @@ docker run --rm petrocast-ml:dev python -m petrocast_ml.training \
   --as-of 2026-01-01 --horizons 1,2,3 --output-dir /tmp/artifacts
 ```
 
-La publicación a ECR sigue el tagging de ADR-0013 (`sha-<commit-corto>`,
-nunca `latest`); el repo `petrocast/ml` se declara en Terraform
-(`infra/terraform/envs/shared`).
+El comando imprime el JSON del run (artifact, métricas, evaluación) y **sale
+con código 1 a propósito**: sobre los 4 pozos de los fixtures el modelo no le
+gana a la naive, así que los gates de calidad lo rechazan igual que en
+producción. Lo que demuestra que la imagen entrena offline es que el pipeline
+completa e imprime el reporte, no el exit code. El health-check con exit 0 es
+el `CMD` por defecto (`python -c "import petrocast_ml"`), que ejercita la carga
+de lightgbm/libgomp.
+
+El repo ECR `petrocast/ml` ya se declara en Terraform
+(`infra/terraform/envs/shared`); la publicación de la imagen —tagging
+`sha-<commit-corto>` de ADR-0013, nunca `latest`— aterriza con su workflow de
+build/publish y el grant de push del rol de CI, aún pendientes (fuera de F3-23).
 
 ## Verificación
 
