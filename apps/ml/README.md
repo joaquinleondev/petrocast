@@ -32,13 +32,13 @@ El URI estable del modelo servido es
 - `train()` entrena el baseline LightGBM global (F3-13).
 - `create_tracking_client()` y `record_training_run()` registran cada
   entrenamiento en MLflow (F3-14).
-- `create_registry_client()` y `promote_champion()` definen el registry de F3-16.
+- `create_registry_client()` y `promote_champion()` implementan el registry de
+  F3-16.
 - `load_champion()` y `predict()` definen el runtime de inferencia de F3-18.
 
-Las implementaciones aún diferidas (registry de F3-16, inferencia de F3-18)
-fallan explícitamente con `NotImplementedError` hasta que aterrice su issue; sus
-firmas quedan disponibles para que API y Data integren el paquete sin duplicar
-contratos.
+La implementación aún diferida de inferencia de F3-18 falla explícitamente con
+`NotImplementedError` hasta que aterrice su issue; sus firmas quedan disponibles
+para que API y Data integren el paquete sin duplicar contratos.
 
 ## Entrenamiento local (F3-13)
 
@@ -96,8 +96,10 @@ Cada run registra: **parámetros** (hiperparámetros efectivos de LightGBM +
 horizonte y huella del dataset), **métricas** (`model_mae_m3`, `model_rmse_m3`,
 `naive_mae_m3`, `naive_rmse_m3` y conteos de filas), los **tags obligatorios del
 contrato C** (`as_of_date`, `features_version`, `git_commit`) y los **artefactos**
-`model.txt` + `metadata.json`. El run se nombra `<as_of_date>-h<horizonte>`, de
-modo que dos cortes aparecen como dos runs distinguibles.
+`model.txt` + `metadata.json`. Además, `--track` publica un Logged Model de
+MLflow llamado `model` y guarda su URI inmutable como tag del run. El run se nombra
+`<as_of_date>-h<horizonte>`, de modo que dos cortes aparecen como dos runs
+distinguibles.
 
 Para la demo: abrir la UI de MLflow en `MLFLOW_TRACKING_URI`, entrar al
 experimento `petrocast-production-forecast` y comparar runs filtrando por el tag
@@ -118,6 +120,40 @@ del modelo `≤` MAE de la naive. Si alguno falla, el proceso termina con **exit
 code 1** — un run rojo no es promovible (#16). El reporte completo queda en
 `evaluation.json` junto al artifact y, con `--track`, como métricas `eval_*` y
 el tag `gates_passed` en el mismo run de MLflow.
+
+## Registry y promoción de champion (F3-16)
+
+Un entrenamiento ejecutado con `--track` deja un Logged Model llamado `model`
+asociado al run. Con su `run_id`, registrar una nueva versión del modelo configurado:
+
+```bash
+uv run python -m petrocast_ml.registry register --run-id <run-id>
+```
+
+Inspeccionar las versiones registradas y el alias vigente:
+
+```bash
+uv run python -m petrocast_ml.registry inspect
+uv run python -m petrocast_ml.registry inspect --version <version>
+```
+
+Promover una versión existente al alias `champion`:
+
+```bash
+uv run python -m petrocast_ml.registry promote --version <version>
+```
+
+La promoción verifica que el run de origen tenga `gates_passed=true`; si no,
+rechaza el cambio de alias. La versión registrada conserva la trazabilidad del
+entrenamiento: `as_of_date`, métricas y versión. Promover no vuelve a entrenar
+ni crea otra versión, solo mueve el alias `champion`.
+
+El rollback usa el mismo mecanismo: identificar con `inspect` una versión
+anterior válida y re-apuntar el alias con el comando explícito:
+
+```bash
+uv run python -m petrocast_ml.registry rollback --to-version <version-anterior>
+```
 
 ## Verificación
 

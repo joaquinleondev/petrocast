@@ -22,6 +22,7 @@ from petrocast_ml.tracking import (
     FEATURES_VERSION_TAG,
     GATES_PASSED_TAG,
     GIT_COMMIT_TAG,
+    LOGGED_MODEL_URI_TAG,
     RunMetadata,
     TrackingClient,
     TrackingValue,
@@ -52,6 +53,7 @@ class FakeTrackingClient:
         self.metrics: dict[str, float] = {}
         self.tags: dict[str, str] = {}
         self.artifact_dirs: list[Path] = []
+        self.models: list[object] = []
 
     @contextmanager
     def start_run(self, *, run_name: str) -> Iterator[None]:
@@ -73,6 +75,10 @@ class FakeTrackingClient:
 
     def log_artifacts(self, artifact_dir: Path) -> None:
         self.artifact_dirs.append(artifact_dir)
+
+    def log_model(self, model: object) -> str:
+        self.models.append(model)
+        return "models:/m-fixture"
 
 
 @pytest.fixture
@@ -133,6 +139,7 @@ def test_records_the_mandatory_contract_c_tags(
         AS_OF_DATE_TAG: "2026-01-01",
         FEATURES_VERSION_TAG: "fixtures",
         GIT_COMMIT_TAG: "abc123",
+        LOGGED_MODEL_URI_TAG: "models:/m-fixture",
     }
     assert run_name == "2026-01-01-h3"
 
@@ -201,6 +208,7 @@ def test_logs_the_artifact_directory(
     )
     assert fake.artifact_dirs == [artifact_dir]
     assert (artifact_dir / MODEL_FILE).exists()
+    assert fake.models == [result.model]
 
 
 def test_opens_and_closes_exactly_one_run(

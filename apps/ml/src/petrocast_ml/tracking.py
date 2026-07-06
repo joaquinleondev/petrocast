@@ -18,14 +18,15 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import mlflow
+import mlflow.lightgbm
 import pandas as pd
 
 from petrocast_ml.config import MlSettings, get_settings
 from petrocast_ml.evaluation.report import EvaluationReport
-from petrocast_ml.training.contracts import TrainingRequest, TrainingResult
+from petrocast_ml.training.contracts import TrainableModel, TrainingRequest, TrainingResult
 
 TrackingValue = str | int | float | bool
 
@@ -39,6 +40,8 @@ GIT_COMMIT_TAG = "git_commit"
 #: Tag set by F3-15: whether the run's candidate passed the blocking gates —
 #: what champion promotion (#16) checks before touching the alias.
 GATES_PASSED_TAG = "gates_passed"
+MODEL_ARTIFACT_PATH = "model"
+LOGGED_MODEL_URI_TAG = "logged_model_uri"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +77,10 @@ class TrackingClient(Protocol):
         """Upload every file in a directory as run artifacts."""
         ...
 
+    def log_model(self, model: TrainableModel) -> str:
+        """Log a loadable MLflow model and return its immutable URI."""
+        ...
+
 
 class MlflowTrackingClient:
     """``TrackingClient`` backed by an MLflow tracking server or file store.
@@ -101,6 +108,10 @@ class MlflowTrackingClient:
 
     def log_artifacts(self, artifact_dir: Path) -> None:
         mlflow.log_artifacts(str(artifact_dir))
+
+    def log_model(self, model: TrainableModel) -> str:
+        model_info = mlflow.lightgbm.log_model(model, name=MODEL_ARTIFACT_PATH)
+        return cast(str, model_info.model_uri)
 
 
 def create_tracking_client(settings: MlSettings | None = None) -> TrackingClient:
@@ -172,6 +183,7 @@ def record_training_run(
             client.log_metrics(evaluation.to_mlflow_metrics())
             client.set_tags({GATES_PASSED_TAG: str(evaluation.gates_passed).lower()})
         client.log_artifacts(artifact_dir)
+        client.set_tags({LOGGED_MODEL_URI_TAG: client.log_model(result.model)})
     return run_name
 
 
@@ -180,6 +192,8 @@ __all__ = [
     "FEATURES_VERSION_TAG",
     "GATES_PASSED_TAG",
     "GIT_COMMIT_TAG",
+    "LOGGED_MODEL_URI_TAG",
+    "MODEL_ARTIFACT_PATH",
     "MlflowTrackingClient",
     "RunMetadata",
     "TrackingClient",
