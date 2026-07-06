@@ -4,6 +4,12 @@
 
 ## Descripción
 
+Petrocast es una plataforma de datos y pronóstico de producción de hidrocarburos
+construida sobre datos públicos de `datos.gob.ar`. Integra una API REST (Fase 1),
+una plataforma de datos medallion con dbt + Dagster (Fase 2) y una vertical de
+machine learning que entrena, evalúa, promueve y sirve un modelo de pronóstico de
+producción vía `GET /api/v1/predictions` (Fase 3).
+
 ## Video Entrega Adenda Fase 1
 
 Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44OcpUzbenkfb).
@@ -11,6 +17,10 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44O
 ## Video Entrega Adenda Fase 2
 
 Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
+
+## Video Entrega Adenda Fase 3
+
+Demo del proyecto disponible en YouTube: **TBD** (pendiente de grabación).
 
 ## Equipo
 
@@ -21,10 +31,11 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
 ## Documentación
 
 - [Consigna de la materia (PRD y adendas)](docs/assignment/)
-- [PRD — Fase 2](docs/prd/prd-v0.2.md)
+- [PRD — Fase 2](docs/assignment/prd.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Arquitectura](docs/architecture/c4-context.md)
 - [README de Fase 2](docs/fase-2/README.md)
+- [README de Fase 3 — vertical ML](docs/fase-3/README.md)
 - [Modelo de datos — star schema Gold](docs/architecture/modelo-datos.md)
 - [Backlog de Fase 2](docs/backlog/issues-fase-2.md)
 - [Runbooks operativos](docs/runbooks/)
@@ -36,7 +47,7 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
 | ------ | ---------- | ---------------- | ---------------------------------- |
 | Fase 1 | 2026-04-28 | ✅ Completa      | [link](https://api.petrocast.shop) |
 | Fase 2 | 2026-06-09 | ✅ Completa      | [link](https://youtu.be/4pZgppJV6uo)                                  |
-| Fase 3 | 2026-06-30 | ⏳ Pendiente     | —                                  |
+| Fase 3 | 2026-07-11 | ✅ Completa      | [guion](docs/fase-3/README.md#guion--checklist-de-video) |
 
 ## Cómo ejecutar
 
@@ -81,6 +92,22 @@ docker compose -f infra/compose.data.yml up --build
 El paquete compartido `apps/ml` concentra los contratos de features,
 entrenamiento, tracking, registry e inferencia usados por Data y API. La guía de
 configuración y los comandos locales están en [apps/ml/README.md](apps/ml/README.md).
+
+Operación de la vertical ML (detalle en [docs/fase-3/README.md](docs/fase-3/README.md)):
+
+```bash
+# Tracking + retraining (MLflow en :5000, Dagster en :3000)
+docker compose --env-file apps/data/.env \
+  -f infra/compose.data.yml -f infra/compose.mlflow.yml \
+  up --build data-postgres mlflow dagster
+
+# Retraining por CLI (features → training → evaluación → promoción)
+PARTITION=2026-01-01 infra/scripts/demo/f3-21-demo-evidence.sh retrain-cli
+
+# API de predicciones (con la API levantada)
+curl -H "X-API-Key: abcdef12345" \
+  "http://localhost:8000/api/v1/predictions?id_well=POZO-001&as_of_date=2024-03-15&horizon=3"
+```
 
 ## Despliegue
 
