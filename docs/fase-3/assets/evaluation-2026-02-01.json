@@ -1,0 +1,73 @@
+{
+  "as_of_date": "2026-02-01",
+  "horizons": [
+    1,
+    2,
+    3
+  ],
+  "thresholds": {
+    "mase_median_max": 1.0,
+    "naive_mae_ratio_max": 1.0,
+    "arps_mape_margin_pp": 2.0
+  },
+  "wells_in_test": 4773,
+  "wells_eligible": 4320,
+  "wells_excluded_short_history": 453,
+  "wells_mase_undefined": 575,
+  "arps_fitted_wells": 3622,
+  "arps_failed_wells": 698,
+  "arps_degraded": false,
+  "model_mae_m3": 98.52215984584161,
+  "naive_mae_m3": 113.51737165123905,
+  "distributions": {
+    "mase": {
+      "p50": 0.4026279051903767,
+      "p75": 0.9459554959829645,
+      "p90": 2.271960645768446
+    },
+    "model_mae_m3": {
+      "p50": 6.457765878481648,
+      "p75": 92.9884794245936,
+      "p90": 303.2210617451752
+    },
+    "naive_mae_m3": {
+      "p50": 2.3614016666666675,
+      "p75": 93.87666666666665,
+      "p90": 331.89566666666667
+    },
+    "mape_nonzero_pct": {
+      "p50": 29.92636769708101,
+      "p75": 86.38891079975423,
+      "p90": 414.4144063308133
+    },
+    "arps_mape_nonzero_pct": {
+      "p50": 48.03070818739376,
+      "p75": 98.24614491119652,
+      "p90": 343.3761910852552
+    }
+  },
+  "gates": [
+    {
+      "name": "mase_median",
+      "value": 0.4026279051903767,
+      "threshold": 1.0,
+      "passed": true,
+      "blocking": true
+    },
+    {
+      "name": "mae_vs_naive",
+      "value": 0.8679038143037048,
+      "threshold": 1.0,
+      "passed": true,
+      "blocking": true
+    },
+    {
+      "name": "mape_vs_arps",
+      "value": -18.105971538756044,
+      "threshold": 2.0,
+      "passed": true,
+      "blocking": false
+    }
+  ],
+  "gates_passed": true
+}
