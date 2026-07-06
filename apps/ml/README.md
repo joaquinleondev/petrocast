@@ -36,9 +36,9 @@ El URI estable del modelo servido es
   F3-16.
 - `load_champion()` y `predict()` definen el runtime de inferencia de F3-18.
 
-La implementación aún diferida de inferencia de F3-18 falla explícitamente con
-`NotImplementedError` hasta que aterrice su issue; sus firmas quedan disponibles
-para que API y Data integren el paquete sin duplicar contratos.
+`load_champion()` resuelve `models:/<modelo>@champion` contra el registry y
+`predict()` expande una fila de features del contrato A a un horizonte de
+meses; es el runtime real que `apps/api` consume en serving (F3-18).
 
 ## Entrenamiento local (F3-13)
 
@@ -155,6 +155,45 @@ anterior válida y re-apuntar el alias con el comando explícito:
 uv run python -m petrocast_ml.registry rollback --to-version <version-anterior>
 ```
 
+El procedimiento operativo completo — verificar la versión activa, hacer
+efectivo el cambio en la API, rollback ante incidentes y qué hacer si MLflow o
+ECR no responden — está en el
+[runbook de promoción](../../docs/runbooks/ml-promotion.md).
+
+## Imagen y CI/CD (F3-23)
+
+Cada PR corre la red de seguridad offline del paquete (job `ml` del CI): tests
+unitarios, smoke de training con los fixtures del contrato A, smoke del CLI de
+evaluación/gates y el smoke de inferencia end-to-end
+(`tests/smoke/test_inference_smoke.py`), que entrena, evalúa, registra y
+promueve un champion en un MLflow efímero (SQLite) y verifica que
+`models:/<modelo>@champion` carga y predice — si el modelo no carga o el
+contrato de features se rompe, el CI falla. Nada de esto necesita Postgres,
+MLflow server ni red.
+
+La imagen `petrocast/ml` (ADR-0035) empaqueta el runtime de
+training/inferencia con el mismo patrón slim/multistage/non-root de las demás
+apps (ADR-0014). Se construye con contexto `apps/`, igual que `api` y `data`:
+
+```bash
+# desde apps/ml
+docker build -t petrocast-ml:dev -f Dockerfile ..
+```
+
+La imagen incluye los fixtures offline, así que el training smoke corre
+dentro del contenedor sin warehouse ni MLflow:
+
+```bash
+docker run --rm petrocast-ml:dev python -m petrocast_ml.training \
+  --features-csv tests/fixtures/well_features.csv \
+  --production-csv tests/fixtures/production_monthly.csv \
+  --as-of 2026-01-01 --horizons 1,2,3 --output-dir /tmp/artifacts
+```
+
+La publicación a ECR sigue el tagging de ADR-0013 (`sha-<commit-corto>`,
+nunca `latest`); el repo `petrocast/ml` se declara en Terraform
+(`infra/terraform/envs/shared`).
+
 ## Verificación
 
 ```bash
@@ -162,5 +201,5 @@ uv sync --frozen
 uv run pytest
 uv run ruff check .
 uv run mypy
-docker build -t petrocast-ml:dev .
+docker build -t petrocast-ml:dev -f Dockerfile ..
 ```
