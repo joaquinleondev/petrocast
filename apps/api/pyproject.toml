@@ -71,6 +71,13 @@ ignore_missing_imports = true
 module = ["pandas.*"]
 ignore_missing_imports = true
 
+# petrocast_ml is a local editable path dep (py.typed): resolved and type-checked
+# by `uv run mypy`, but absent from the isolated pre-commit mypy hook env, so it
+# must be ignore-missing there (same pattern as psycopg above).
+[[tool.mypy.overrides]]
+module = ["petrocast_ml.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration", "tests/contract"]
 addopts = "--cov=src --cov-report=term-missing --cov-fail-under=70"
