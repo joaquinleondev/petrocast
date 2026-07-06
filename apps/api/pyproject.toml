@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.136.0",
+    "pandas>=2.0",
     "petrocast-ml",
     "prometheus-fastapi-instrumentator>=7.0.0",
     "psycopg[binary]>=3.2.0",
@@ -64,6 +65,17 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["psycopg.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+ignore_missing_imports = true
+
+# petrocast_ml is a local editable path dep (py.typed): resolved and type-checked
+# by `uv run mypy`, but absent from the isolated pre-commit mypy hook env, so it
+# must be ignore-missing there (same pattern as psycopg above).
+[[tool.mypy.overrides]]
+module = ["petrocast_ml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

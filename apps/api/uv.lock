@@ -2060,6 +2060,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
+    { name = "pandas" },
     { name = "petrocast-ml" },
     { name = "prometheus-fastapi-instrumentator" },
     { name = "psycopg", extra = ["binary"] },
@@ -2079,6 +2080,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
+    { name = "pandas", specifier = ">=2.0" },
     { name = "petrocast-ml", editable = "../ml" },
     { name = "prometheus-fastapi-instrumentator", specifier = ">=7.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
@@ -2109,6 +2111,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic-settings" },
     { name = "scikit-learn" },
+    { name = "scipy" },
 ]
 
 [package.metadata]
@@ -2122,6 +2125,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=23.0.1,<25.0.0" },
     { name = "pydantic-settings", specifier = ">=2.10.0,<3.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.0,<2.0.0" },
+    { name = "scipy", specifier = ">=1.13,<2.0" },
 ]
 
 [package.metadata.requires-dev]
