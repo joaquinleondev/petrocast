@@ -16,7 +16,8 @@
 - MLflow 3.14 rechaza file store → backend `sqlite:///`.
 - dbt gold con `--indirect-selection cautious` (gotcha conocido de selección eager).
 - Branch: `docs/f3-22-model-card-backtesting`. PR: `docs(ml): add model card and backtesting report`, `Closes #125`.
-- Scratchpad para todo lo temporal: `$SCRATCH` = `/private/tmp/claude-501/-Users-ignacio-petrocast/ba20538a-27bd-460b-a3de-c83c30c6c9bf/scratchpad`.
+- Rutas: `$REPO` = raíz del clon local del repo; `$SCRATCH` = directorio
+  temporal fuera del repo (p. ej. `${TMPDIR:-/tmp}/f3-22-scratch`).
 
 ---
 
@@ -80,7 +81,7 @@ Regla: `CUTOFF = (último mes con datos) − 2 meses` (los horizontes 1–3 nece
 docker run -d --name f3-22-pg \
   -e POSTGRES_USER=petrocast -e POSTGRES_PASSWORD=petrocast -e POSTGRES_DB=petrocast \
   -p 5432:5432 \
-  -v /Users/ignacio/petrocast/infra/data/postgres/init:/docker-entrypoint-initdb.d:ro \
+  -v $REPO/infra/data/postgres/init:/docker-entrypoint-initdb.d:ro \
   postgres:16
 until docker exec f3-22-pg pg_isready -U petrocast -d petrocast; do sleep 1; done
 ```
@@ -91,7 +92,7 @@ Expected: `accepting connections`.
 
 ```bash
 mkdir -p $SCRATCH/f3-22/mlflow
-cd /Users/ignacio/petrocast/apps/ml && uv run mlflow server \
+cd $REPO/apps/ml && uv run mlflow server \
   --backend-store-uri sqlite:///$SCRATCH/f3-22/mlflow/mlflow.db \
   --default-artifact-root $SCRATCH/f3-22/mlflow/artifacts \
   --host 127.0.0.1 --port 5000 &
@@ -103,7 +104,7 @@ Expected: `OK`.
 - [ ] **Step 3: Env vars de la corrida**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/data
+cd $REPO/apps/data
 export PYTHONPATH=$PWD/src \
   PETROCAST_SOURCE_PRODUCTION_URL="$PROD_URL" \
   PETROCAST_SOURCE_WELLS_URL="$WELLS_URL" \
@@ -113,7 +114,7 @@ export PYTHONPATH=$PWD/src \
   DBT_PROFILES_DIR=$PWD/dbt \
   PETROCAST_MLFLOW_TRACKING_URI=http://127.0.0.1:5000 \
   PETROCAST_ML_ARTIFACT_DIR=$SCRATCH/f3-22/ml-artifacts \
-  PETROCAST_GIT_SHA=$(git -C /Users/ignacio/petrocast rev-parse --short HEAD)
+  PETROCAST_GIT_SHA=$(git -C $REPO rev-parse --short HEAD)
 ```
 
 ### Task 3: Ingesta bronze real + dbt silver/gold
@@ -126,7 +127,7 @@ export PYTHONPATH=$PWD/src \
 - [ ] **Step 1: Schemas + bronze (particiones reales)**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/data
+cd $REPO/apps/data
 uv run dagster asset materialize -m petrocast_data.definitions \
   --select "warehouse_schemas_ready" 2>&1 | tail -2
 uv run dagster asset materialize -m petrocast_data.definitions \
@@ -148,7 +149,7 @@ Expected: filas > 0 y ventana ≥ 24 meses. (Si el nombre de columna de fecha di
 - [ ] **Step 3: dbt silver + gold**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/data
+cd $REPO/apps/data
 uv run dbt build --project-dir dbt --select tag:silver 2>&1 | tail -3
 uv run dbt build --project-dir dbt --select tag:gold --indirect-selection cautious 2>&1 | tail -3
 docker exec f3-22-pg psql -U petrocast -d petrocast -c \
@@ -167,7 +168,7 @@ Expected: builds `PASS`, `gold.fact_production` con pozos > 100 y ventana comple
 - [ ] **Step 1: Loop de materialización por cutoff**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/data
+cd $REPO/apps/data
 for m in $FEATURE_MONTHS; do
   uv run dbt build --project-dir dbt --select tag:features \
     --vars "{\"as_of_date\": \"$m\"}" --indirect-selection cautious 2>&1 | tail -1
@@ -195,7 +196,7 @@ Expected: 24 filas de as_of_date, conteos de pozos estables.
 - [ ] **Step 1: Materializar la cadena ML en la partición del cutoff**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/data
+cd $REPO/apps/data
 uv run dagster asset materialize -m petrocast_data.definitions \
   --select "ml/training_candidate,ml/model_evaluation,ml/champion_promotion" \
   --partition "$CUTOFF" 2>&1 | tee $SCRATCH/f3-22/ml-run.log | tail -15
@@ -216,7 +217,7 @@ Expected: JSON con `gates`, `distributions`, conteos; run_id y versión anotados
 - [ ] **Step 3: Verificar champion resuelto por alias**
 
 ```bash
-cd /Users/ignacio/petrocast/apps/ml
+cd $REPO/apps/ml
 PETROCAST_MLFLOW_TRACKING_URI=http://127.0.0.1:5000 uv run python -c "
 from petrocast_ml import create_registry_client
 from petrocast_ml.config import get_settings
@@ -243,8 +244,8 @@ Expected: `ModelVersion(name='petrocast-production', version=..., run_id=...)` �
 - [ ] **Step 1: Copiar anexo**
 
 ```bash
-mkdir -p /Users/ignacio/petrocast/docs/fase-3/assets
-cp $SCRATCH/f3-22/evaluation.json /Users/ignacio/petrocast/docs/fase-3/assets/evaluation-$CUTOFF.json
+mkdir -p $REPO/docs/fase-3/assets
+cp $SCRATCH/f3-22/evaluation.json $REPO/docs/fase-3/assets/evaluation-$CUTOFF.json
 ```
 
 - [ ] **Step 2: Escribir el reporte**
@@ -289,7 +290,7 @@ mape_nonzero_pct, arps_mape_nonzero_pct — cuantiles tal cual el JSON)
 - [ ] **Step 3: Lint + commit**
 
 ```bash
-cd /Users/ignacio/petrocast
+cd $REPO
 npx markdownlint-cli2 "docs/fase-3/**/*.md"
 git add docs/fase-3/backtesting-report.md docs/fase-3/assets/
 git commit -m "docs(ml): backtesting report over real capitulo IV data [F3-22]"
@@ -347,7 +348,7 @@ run de tracking vinculado)
 - [ ] **Step 2: Lint + commit**
 
 ```bash
-cd /Users/ignacio/petrocast
+cd $REPO
 npx markdownlint-cli2 "docs/fase-3/**/*.md"
 git add docs/fase-3/model-card.md
 git commit -m "docs(ml): model card for the champion baseline [F3-22]"
@@ -373,7 +374,7 @@ kill %1 2>/dev/null  # mlflow server
 - [ ] **Step 4: Push + PR**
 
 ```bash
-cd /Users/ignacio/petrocast
+cd $REPO
 git push -u origin docs/f3-22-model-card-backtesting
 gh pr create --title "docs(ml): add model card and backtesting report" \
   --body "$(cat <<'EOF'
