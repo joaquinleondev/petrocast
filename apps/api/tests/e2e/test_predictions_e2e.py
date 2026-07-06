@@ -23,13 +23,9 @@ from collections.abc import Generator
 from datetime import date
 from pathlib import Path
 
+import mlflow
 import pandas as pd
 import pytest
-
-pytest.importorskip("lightgbm")
-pytest.importorskip("mlflow")
-
-import mlflow
 from fastapi.testclient import TestClient
 from mlflow.tracking import MlflowClient
 from petrocast_ml.config import ML_APP_DIR, MlSettings

@@ -95,9 +95,9 @@ def test_prediction_openapi_exposes_examples():
     params = {p["name"]: p for p in operation["parameters"]}
     for name in ("id_well", "as_of_date", "horizon"):
         param = params[name]
-        assert "example" in param or "examples" in param, (
-            f"query param '{name}' has no OpenAPI example"
-        )
+        assert (
+            "example" in param or "examples" in param
+        ), f"query param '{name}' has no OpenAPI example"
 
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     response_schema_name = response_ref.rsplit("/", 1)[-1]
@@ -109,13 +109,13 @@ def test_prediction_openapi_exposes_examples():
     has_property_level_examples = all(
         "example" in prop or "examples" in prop for prop in properties.values()
     )
-    assert has_schema_level_example or has_property_level_examples, (
-        "PredictionResponse schema has no examples (neither schema-level nor per-property)"
-    )
+    assert (
+        has_schema_level_example or has_property_level_examples
+    ), "PredictionResponse schema has no examples (neither schema-level nor per-property)"
 
     point_ref = response["properties"]["predictions"]["items"]["$ref"]
     point = spec["components"]["schemas"][point_ref.rsplit("/", 1)[-1]]
     for field_name, prop in point["properties"].items():
-        assert "example" in prop or "examples" in prop, (
-            f"PredictionPoint.{field_name} has no OpenAPI example"
-        )
+        assert (
+            "example" in prop or "examples" in prop
+        ), f"PredictionPoint.{field_name} has no OpenAPI example"
