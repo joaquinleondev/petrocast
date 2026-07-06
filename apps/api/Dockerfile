@@ -31,9 +31,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/apps/api/.venv/bin:$PATH"
 
+# libgomp1: OpenMP runtime that lightgbm loads via ctypes at import time. The
+# API imports the ML stack (F3-18 champion serving) so the slim base — which
+# omits it — would otherwise crash on startup with "libgomp.so.1: cannot open".
 RUN apt-get update && \
     echo "apt cache buster: ${APT_CACHE_BUSTER}" >/dev/null && \
     apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends libgomp1 && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir --upgrade "pip>=26.0" && \
     groupadd -g 10001 app && \
