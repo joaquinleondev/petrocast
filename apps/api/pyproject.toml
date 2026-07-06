@@ -79,8 +79,9 @@ module = ["petrocast_ml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit", "tests/integration", "tests/contract"]
+testpaths = ["tests/unit", "tests/integration", "tests/contract", "tests/e2e"]
 addopts = "--cov=src --cov-report=term-missing --cov-fail-under=70"
+markers = ["e2e: end-to-end test que carga un champion MLflow real"]
 
 [tool.coverage.run]
 source = ["src"]

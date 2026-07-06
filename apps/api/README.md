@@ -30,6 +30,22 @@ curl -H "X-API-Key: abcdef12345" \
   "http://localhost:8000/api/v1/predictions?id_well=POZO-001&as_of_date=2024-03-15&horizon=3"
 ```
 
+Expected response (`200`):
+
+```json
+{
+  "id_well": "POZO-001",
+  "as_of_date": "2024-03-15",
+  "horizon": 3,
+  "model_version": "7",
+  "predictions": [
+    { "month": "2024-04-01", "oil_prod_m3": 1234.5 },
+    { "month": "2024-05-01", "oil_prod_m3": 1180.2 },
+    { "month": "2024-06-01", "oil_prod_m3": 1125.9 }
+  ]
+}
+```
+
 > The endpoint serves the **registry champion** (F3-18): the loader resolves
 > `models:/petrocast-production@champion` (F3-16) and runs it over the persisted
 > point-in-time features (`features.well_features`, contract A). `as_of_date` is

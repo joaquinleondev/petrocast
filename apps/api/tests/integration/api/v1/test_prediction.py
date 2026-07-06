@@ -85,10 +85,19 @@ def test_horizon_out_of_range_returns_422(client, auth_headers, horizon):
     assert isinstance(resp.json()["detail"], list)
 
 
-def test_invalid_as_of_date_returns_422(client, auth_headers):
+@pytest.mark.parametrize(
+    "as_of_date",
+    [
+        "not-a-date",  # malformed string
+        "0",  # bare numeric: pydantic's lax mode would read it as a Unix timestamp
+        "2263-01-01",  # beyond pandas Timestamp range -> would overflow to NaT
+        "1899-12-31",  # below the accepted well-production window
+    ],
+)
+def test_invalid_as_of_date_returns_422(client, auth_headers, as_of_date):
     resp = client.get(
         URL,
-        params={**VALID_PARAMS, "as_of_date": "not-a-date"},
+        params={**VALID_PARAMS, "as_of_date": as_of_date},
         headers=auth_headers,
     )
 
