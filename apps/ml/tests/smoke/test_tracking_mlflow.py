@@ -67,7 +67,7 @@ def test_mlflow_client_persists_run_to_file_store(
 
     client = create_tracking_client(settings)
     assert isinstance(client, MlflowTrackingClient)
-    run_name = record_training_run(
+    run_id = record_training_run(
         client,
         request=request,
         result=result,
@@ -86,7 +86,8 @@ def test_mlflow_client_persists_run_to_file_store(
     assert run.data.tags[AS_OF_DATE_TAG] == "2026-01-01"
     assert run.data.tags[FEATURES_VERSION_TAG] == "fixtures"
     assert run.data.tags[GIT_COMMIT_TAG] == "abc123"
-    assert run.data.tags["mlflow.runName"] == run_name
+    assert run.info.run_id == run_id
+    assert run.data.tags["mlflow.runName"] == "2026-01-01-h3"
     assert run.data.tags[LOGGED_MODEL_URI_TAG].startswith("models:/m-")
 
     assert run.data.metrics["model_mae_m3"] == pytest.approx(result.metrics["model_mae_m3"])

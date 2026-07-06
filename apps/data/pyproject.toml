@@ -19,6 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pandas-stubs>=2.2.0",
     "pytest>=8.0.0",
     "ruff>=0.7.0",
     "mypy>=1.11.0",
@@ -58,6 +59,8 @@ module = [
     "petrocast_data.assets.dbt",
     "petrocast_data.assets.dlt",
     "petrocast_data.assets.features",
+    "petrocast_data.assets.training",
+    "petrocast_data.schedules",
     "petrocast_data.sensors",
 ]
 disallow_untyped_decorators = false

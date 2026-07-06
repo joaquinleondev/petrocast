@@ -221,6 +221,46 @@ filas, el rango histórico usado, las variables dbt y un hash de configuración 
 SQL. Los backfills ejecutan una partición por run porque cada snapshot recibe un
 único `as_of_date`.
 
+## Retraining mensual (F3-19)
+
+El job particionado `retraining_job` expone en Dagster el grafo
+`features → training → evaluation → promotion`. El schedule
+`monthly_retraining_schedule` corre el día 5 de cada mes a las **06:00 UTC** y
+procesa la partición `YYYY-MM-01` correspondiente al primer día de ese mes.
+
+Para levantar localmente PostgreSQL, Dagster y MLflow desde la raíz del repo:
+
+```bash
+cp apps/data/.env.example apps/data/.env
+docker compose --env-file apps/data/.env -f infra/compose.data.yml -f infra/compose.mlflow.yml up --build data-postgres mlflow dagster
+```
+
+La UI de Dagster queda en <http://localhost:3000> y MLflow en
+<http://localhost:5000>. El job usa `PETROCAST_MLFLOW_TRACKING_URI`,
+`PETROCAST_MLFLOW_EXPERIMENT_NAME`, `PETROCAST_MLFLOW_MODEL_NAME` y
+`PETROCAST_MLFLOW_MODEL_ALIAS`; el servicio de MLflow usa además
+`PETROCAST_MLFLOW_ARTIFACT_ROOT`. Los valores locales están documentados en
+`apps/data/.env.example`.
+
+Trigger manual por CLI, desde `apps/data`:
+
+```bash
+uv run dagster asset materialize \
+  --module-name petrocast_data.definitions \
+  --select "features/well_features,ml/training_candidate,ml/model_evaluation,ml/champion_promotion" \
+  --partition YYYY-MM-01
+```
+
+Desde la UI, abrir **Jobs → retraining_job**, elegir la partición mensual y
+lanzar el run. En cada asset se ve metadata operativa: `as_of_date`, origen del
+trigger, filas y pozos del dataset, versión de features, directorio de
+artefactos, `mlflow_run_id`, métricas, resultado de gates, versión registrada,
+alias y estado de promoción.
+
+Si los gates bloqueantes fallan, el candidato y sus métricas quedan trazables
+en MLflow, pero el step de promoción falla y el alias `champion` no se mueve; el
+modelo servido conserva la última versión aprobada.
+
 ## Calidad de datos
 
 F2-17 agrega chequeos de calidad sobre la transición **Bronze → Silver**

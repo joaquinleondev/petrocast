@@ -9,6 +9,7 @@ needed; the adapter itself is checked in ``smoke/test_tracking_mlflow.py``.
 
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -56,11 +57,11 @@ class FakeTrackingClient:
         self.models: list[object] = []
 
     @contextmanager
-    def start_run(self, *, run_name: str) -> Iterator[None]:
+    def start_run(self, *, run_name: str) -> Iterator[object]:
         self.run_names.append(run_name)
         self.started += 1
         try:
-            yield
+            yield _FakeActiveRun(info=_FakeRunInfo(run_id=f"run-{self.started}"))
         finally:
             self.ended += 1
 
@@ -79,6 +80,16 @@ class FakeTrackingClient:
     def log_model(self, model: object) -> str:
         self.models.append(model)
         return "models:/m-fixture"
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeRunInfo:
+    run_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeActiveRun:
+    info: _FakeRunInfo
 
 
 @pytest.fixture
@@ -127,7 +138,7 @@ def test_records_the_mandatory_contract_c_tags(
     run_metadata: RunMetadata,
 ) -> None:
     fake = FakeTrackingClient()
-    run_name = record_training_run(
+    run_id = record_training_run(
         fake,
         request=request_smoke,
         result=result,
@@ -141,7 +152,7 @@ def test_records_the_mandatory_contract_c_tags(
         GIT_COMMIT_TAG: "abc123",
         LOGGED_MODEL_URI_TAG: "models:/m-fixture",
     }
-    assert run_name == "2026-01-01-h3"
+    assert run_id == "run-1"
 
 
 def test_logs_effective_params_and_dataset_footprint(
