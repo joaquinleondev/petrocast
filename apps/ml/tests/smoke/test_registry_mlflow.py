@@ -73,6 +73,7 @@ def test_mlflow_registry_registers_promotes_and_resolves_champion(
     assert isinstance(registry, MlflowModelRegistry)
 
     candidate = register_candidate(registry, run_id=run_id, settings=settings)
+    repeated_candidate = register_candidate(registry, run_id=run_id, settings=settings)
     promoted = promote_champion(registry, version=candidate.version, settings=settings)
 
     assert candidate.name == MODEL_NAME
@@ -83,14 +84,17 @@ def test_mlflow_registry_registers_promotes_and_resolves_champion(
     assert candidate.metrics["eval_model_mae_m3"] == pytest.approx(8.5)
     assert candidate.metrics["eval_naive_mae_m3"] == pytest.approx(10.0)
     assert candidate.gates_passed is True
+    assert repeated_candidate == candidate
     assert promoted == candidate
 
     reader = MlflowClient(tracking_uri=tracking_uri)
     registered = reader.get_model_version(MODEL_NAME, candidate.version)
     champion = reader.get_model_version_by_alias(MODEL_NAME, "champion")
+    versions = reader.search_model_versions(filter_string=f"name='{MODEL_NAME}'")
     assert registered.run_id == run_id
     assert registered.source == candidate.source
     assert str(champion.version) == candidate.version
+    assert len(versions) == 1
     assert registry.get_by_alias(name=MODEL_NAME, alias="champion") == candidate
 
 

@@ -168,6 +168,9 @@ class MlflowModelRegistry:
             raise CandidateMetadataError(f"run is missing required tag {LOGGED_MODEL_URI_TAG!r}")
         metrics = {str(key): float(value) for key, value in run.data.metrics.items()}
         self._ensure_registered_model(name)
+        for existing in self._client.search_model_versions(filter_string=f"name='{name}'"):
+            if existing.run_id == run_id or (existing.tags or {}).get(RUN_ID_TAG) == run_id:
+                return _normalize_version(existing)
         version = self._client.create_model_version(
             name=name,
             source=model_source,

@@ -14,7 +14,10 @@ from petrocast_data.settings import get_settings
 
 FEATURE_ASSET_KEY = dg.AssetKey(["features", "well_features"])
 FEATURE_MODEL_PATH = DBT_PROJECT_DIR / "models" / "features" / "well_features.sql"
-FEATURE_MONTHLY_PARTITIONS = dg.MonthlyPartitionsDefinition(start_date="2006-01-01")
+FEATURE_MONTHLY_PARTITIONS = dg.MonthlyPartitionsDefinition(
+    start_date="2006-01-01",
+    end_offset=1,
+)
 FEATURE_BACKFILL_POLICY = dg.BackfillPolicy.multi_run(max_partitions_per_run=1)
 FEATURE_HISTORY_START_OFFSET = -1200
 FEATURE_RETRY_POLICY = dg.RetryPolicy(

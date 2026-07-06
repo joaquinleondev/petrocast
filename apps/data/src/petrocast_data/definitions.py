@@ -10,8 +10,15 @@ from petrocast_data.assets.dbt import (
 )
 from petrocast_data.assets.dlt import petrocast_bronze_dlt_assets, petrocast_smoke_dlt_assets
 from petrocast_data.assets.features import feature_dbt_assets
+from petrocast_data.assets.training import (
+    ml_champion_promotion,
+    ml_model_evaluation,
+    ml_training_candidate,
+    retraining_job,
+)
 from petrocast_data.assets.warehouse import warehouse_schemas_ready
 from petrocast_data.resources import WebhookNotificationResource
+from petrocast_data.schedules import retraining_schedule
 from petrocast_data.sensors import quality_block_notification
 
 defs = dg.Definitions(
@@ -23,7 +30,12 @@ defs = dg.Definitions(
         silver_dbt_assets,
         gold_dbt_assets,
         feature_dbt_assets,
+        ml_training_candidate,
+        ml_model_evaluation,
+        ml_champion_promotion,
     ],
+    jobs=[retraining_job],
+    schedules=[retraining_schedule],
     sensors=[quality_block_notification],
     resources={
         "dbt": DbtCliResource(project_dir=DBT_PROJECT_DIR, profiles_dir=DBT_PROJECT_DIR),

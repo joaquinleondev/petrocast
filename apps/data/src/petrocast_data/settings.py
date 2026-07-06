@@ -27,6 +27,12 @@ class DataSettings(BaseSettings):
     source_production_url: str = Field(...)
     source_wells_url: str = Field(...)
     notification_webhook_url: str | None = None
+    mlflow_tracking_uri: str = "http://mlflow:5000"
+    mlflow_experiment_name: str = "petrocast-production-forecast"
+    mlflow_model_name: str = "petrocast-production"
+    mlflow_model_alias: str = "champion"
+    ml_artifact_dir: Path = Path("/opt/dagster/dagster_home/ml-artifacts")
+    git_sha: str = "unknown"
 
     @property
     def psycopg_dsn(self) -> str:

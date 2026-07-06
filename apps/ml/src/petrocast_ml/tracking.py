@@ -140,7 +140,11 @@ def _run_parameters(
     dataset: pd.DataFrame,
 ) -> dict[str, TrackingValue]:
     """Immutable run inputs: the effective model params plus request/dataset shape."""
-    model_params: Mapping[str, object] = result.model.get_params()  # type: ignore[attr-defined]
+    get_params = getattr(result.model, "get_params", None)
+    if callable(get_params):
+        model_params: Mapping[str, object] = get_params()
+    else:
+        model_params = cast(Mapping[str, object], getattr(result.model, "params", {}))
     parameters: dict[str, TrackingValue] = {
         f"lgbm_{name}": _tracking_value(value) for name, value in model_params.items()
     }
@@ -172,10 +176,14 @@ def record_training_run(
     directory produced by ``save_training_artifact`` (``model.txt`` +
     ``metadata.json``). When an evaluation ran (F3-15) its flat ``eval_*``
     metrics land on the same run plus the gate tag promotion (#16) reads.
-    Returns the run name so callers can surface it.
+    Returns the immutable MLflow run ID so downstream registry operations can
+    register the exact candidate produced by this execution.
     """
     run_name = f"{run_metadata.as_of_date.isoformat()}-h{request.horizon}"
-    with client.start_run(run_name=run_name):
+    with client.start_run(run_name=run_name) as active_run:
+        run_id = getattr(getattr(active_run, "info", None), "run_id", None)
+        if not isinstance(run_id, str) or not run_id:
+            raise RuntimeError("tracking client did not expose an active MLflow run ID")
         client.set_tags(_contract_c_tags(run_metadata))
         client.log_parameters(_run_parameters(request, result, dataset))
         client.log_metrics(dict(result.metrics))
@@ -184,7 +192,7 @@ def record_training_run(
             client.set_tags({GATES_PASSED_TAG: str(evaluation.gates_passed).lower()})
         client.log_artifacts(artifact_dir)
         client.set_tags({LOGGED_MODEL_URI_TAG: client.log_model(result.model)})
-    return run_name
+    return run_id
 
 
 __all__ = [
