@@ -13,7 +13,7 @@ from petrocast_ml.features import (
     read_features,
     validate_feature_frame,
 )
-from petrocast_ml.inference import PredictionModel, load_champion, predict
+from petrocast_ml.inference import ChampionModel, PredictionModel, load_champion, predict
 from petrocast_ml.registry import (
     CandidateMetadataError,
     CandidateNotApprovedError,
@@ -42,6 +42,7 @@ __all__ = [
     "KEY_SCHEMA",
     "CandidateMetadataError",
     "CandidateNotApprovedError",
+    "ChampionModel",
     "FeatureKind",
     "FeatureReader",
     "MlSettings",

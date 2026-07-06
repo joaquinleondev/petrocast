@@ -30,10 +30,14 @@ curl -H "X-API-Key: abcdef12345" \
   "http://localhost:8000/api/v1/predictions?id_well=POZO-001&as_of_date=2024-03-15&horizon=3"
 ```
 
-> The endpoint currently serves a **naive-persistence mock**
-> (`model_version = "naive-persistence-mock"`) that repeats the last observed
-> month. F3-18/F3-20 swap the internals for the champion model loaded from the
-> MLflow registry, without changing this contract.
+> The endpoint serves the **registry champion** (F3-18): the loader resolves
+> `models:/petrocast-production@champion` (F3-16) and runs it over the persisted
+> point-in-time features (`features.well_features`, contract A). `as_of_date` is
+> the cutoff (last observed month); the model reads features at `as_of_date + 1`
+> (its first-unknown-month convention) and horizon step `s` predicts month
+> `as_of_date + s`. `model_version` reports the concrete champion version that
+> answered. `503` means the MLflow registry (model) or the warehouse is
+> unavailable — the endpoint degrades gracefully and retries on the next call.
 
 ## Configuration
 
@@ -48,11 +52,16 @@ full list.
 | `PETROCAST_DW_USER` | `petrocast` | Postgres user |
 | `PETROCAST_DW_PASSWORD` | `petrocast` | Postgres password |
 | `PETROCAST_DW_DATABASE` | `petrocast` | Postgres database |
+| `PETROCAST_MLFLOW_TRACKING_URI` | `http://localhost:5000` | MLflow tracking/registry server the champion loads from |
+| `PETROCAST_MLFLOW_MODEL_NAME` | `petrocast-production` | Registered model name |
+| `PETROCAST_MLFLOW_MODEL_ALIAS` | `champion` | Alias resolved to the serving version |
 
-The API reads from the `gold` schema:
+The API reads from the `gold` and `features` schemas:
 
 - `gold.dim_well` — well metadata
 - `gold.fact_production` — monthly production actuals (oil_prod_m3)
+- `features.well_features` — persisted point-in-time features (contract A), read
+  by `(well_id, as_of_date)` for inference
 
 **The data stack must be running** (see `infra/compose.data.yml`) before starting
 the API with `infra/compose.dev.yml`.

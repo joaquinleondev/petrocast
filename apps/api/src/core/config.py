@@ -35,5 +35,21 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PETROCAST_DW_DATABASE", "dw_database"),
     )
 
+    # ML serving (F3-18) — champion model resolved from the MLflow registry.
+    # Mirrors the PETROCAST_MLFLOW_* vars used by apps/ml so the API and the
+    # training stack point at the same tracking server and champion alias.
+    mlflow_tracking_uri: str = Field(
+        default="http://localhost:5000",
+        validation_alias=AliasChoices("PETROCAST_MLFLOW_TRACKING_URI", "mlflow_tracking_uri"),
+    )
+    mlflow_model_name: str = Field(
+        default="petrocast-production",
+        validation_alias=AliasChoices("PETROCAST_MLFLOW_MODEL_NAME", "mlflow_model_name"),
+    )
+    mlflow_model_alias: str = Field(
+        default="champion",
+        validation_alias=AliasChoices("PETROCAST_MLFLOW_MODEL_ALIAS", "mlflow_model_alias"),
+    )
+
 
 settings = Settings()
