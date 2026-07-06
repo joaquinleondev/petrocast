@@ -36,6 +36,7 @@ from petrocast_data.assets.features import (
     FEATURE_BACKFILL_POLICY,
     FEATURE_MODEL_PATH,
     FEATURE_MONTHLY_PARTITIONS,
+    FEATURE_RETRY_POLICY,
     _feature_config_hash,
     _feature_dbt_vars,
     feature_dbt_assets,
@@ -46,6 +47,15 @@ TRAINING_ASSET_KEY = dg.AssetKey(["ml", "training_candidate"])
 EVALUATION_ASSET_KEY = dg.AssetKey(["ml", "model_evaluation"])
 PROMOTION_ASSET_KEY = dg.AssetKey(["ml", "champion_promotion"])
 TRAINING_HORIZONS = (1, 2, 3)
+
+# ADR-0033 ("Retries y recuperación"): the retraining assets perform transient
+# I/O against the warehouse (feature/production reads), MLflow tracking/registry
+# and the artifact store, so they reuse the phase-two backoff policy already
+# applied to the feature asset. Deterministic failures (empty datasets, gate
+# rejections) are never masked behind these retries — those raise and stop the
+# run. Reusing FEATURE_RETRY_POLICY keeps a single source of truth for the
+# max_retries=3 / delay=30 / EXPONENTIAL contract mandated by the ADR.
+RETRAINING_RETRY_POLICY = FEATURE_RETRY_POLICY
 
 _FEATURE_QUERY = """
 select
@@ -286,6 +296,7 @@ def _trigger_source(context: dg.AssetExecutionContext) -> str:
     deps=[FEATURE_ASSET_KEY],
     partitions_def=FEATURE_MONTHLY_PARTITIONS,
     backfill_policy=FEATURE_BACKFILL_POLICY,
+    retry_policy=RETRAINING_RETRY_POLICY,
     group_name="ml",
 )
 def ml_training_candidate(
@@ -324,6 +335,7 @@ def ml_training_candidate(
     ins={"ml_training_candidate": dg.AssetIn(key=TRAINING_ASSET_KEY)},
     partitions_def=FEATURE_MONTHLY_PARTITIONS,
     backfill_policy=FEATURE_BACKFILL_POLICY,
+    retry_policy=RETRAINING_RETRY_POLICY,
     group_name="ml",
 )
 def ml_model_evaluation(
@@ -332,6 +344,20 @@ def ml_model_evaluation(
 ) -> dg.Output[EvaluatedCandidate]:
     """Backtest the candidate, apply gates and persist the MLflow run."""
     settings = get_settings()
+    # Intra-run immutability assumption (reviewed, deliberate — see ADR-0033):
+    # evaluation re-reads `features.well_features`/`gold.fact_production` and
+    # rebuilds the dataset instead of receiving the DataFrame handoff from
+    # ml_training_candidate. This is safe because within a single retraining_job
+    # run the feature store for this `as_of_date` partition is treated as
+    # immutable: the schedule/manual trigger materializes one partition per run
+    # (FEATURE_BACKFILL_POLICY = multi_run, max 1) with no concurrent
+    # rematerialization of the same partition, and features are idempotent per
+    # (well_id, as_of_date). Under that assumption the frame re-read here is the
+    # exact snapshot that trained the persisted candidate, so the gate verdict
+    # corresponds to the model that was — and will be — registered. Passing the
+    # DataFrame through an IO manager would remove even the assumption, but the
+    # extra coupling/serialization cost is not justified for a single-run job;
+    # if concurrent same-partition materialization is ever introduced, revisit.
     features, production = load_training_frames(
         settings,
         as_of_date=ml_training_candidate.request.as_of_date,
@@ -359,6 +385,7 @@ def ml_model_evaluation(
     ins={"ml_model_evaluation": dg.AssetIn(key=EVALUATION_ASSET_KEY)},
     partitions_def=FEATURE_MONTHLY_PARTITIONS,
     backfill_policy=FEATURE_BACKFILL_POLICY,
+    retry_policy=RETRAINING_RETRY_POLICY,
     group_name="ml",
 )
 def ml_champion_promotion(
@@ -409,6 +436,7 @@ retraining_job = dg.define_asset_job(
 __all__ = [
     "EVALUATION_ASSET_KEY",
     "PROMOTION_ASSET_KEY",
+    "RETRAINING_RETRY_POLICY",
     "TRAINING_ASSET_KEY",
     "EvaluatedCandidate",
     "PromotionResult",

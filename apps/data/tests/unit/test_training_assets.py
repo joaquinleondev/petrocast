@@ -16,6 +16,7 @@ from petrocast_data.assets.features import (
 from petrocast_data.assets.training import (
     EVALUATION_ASSET_KEY,
     PROMOTION_ASSET_KEY,
+    RETRAINING_RETRY_POLICY,
     TRAINING_ASSET_KEY,
     EvaluatedCandidate,
     PromotionResult,
@@ -179,5 +180,57 @@ def test_failed_gates_preserve_previous_champion() -> None:
             registry=registry,
         )
 
+    assert registry.alias_calls == []
+    assert registry.get_by_alias(name="petrocast-test", alias="champion") == previous
+
+
+def test_retraining_assets_declare_transient_retry_policy() -> None:
+    # ADR-0033: the three retraining assets do transient I/O (warehouse reads,
+    # MLflow tracking/registry, artifact store) and must reuse the phase-two
+    # RetryPolicy(max_retries=3, delay=30, EXPONENTIAL), same as the feature asset.
+    for asset in (ml_training_candidate, ml_model_evaluation, ml_champion_promotion):
+        assert asset.op.retry_policy == RETRAINING_RETRY_POLICY
+
+    assert RETRAINING_RETRY_POLICY.max_retries == 3
+    assert RETRAINING_RETRY_POLICY.delay == 30
+    assert RETRAINING_RETRY_POLICY.backoff == dg.Backoff.EXPONENTIAL
+
+
+def test_promotion_asset_blocks_and_preserves_champion_on_gate_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Materialize the real ml_champion_promotion asset (not just the helper) with
+    # a gate-failed candidate: the registered candidate must be rejected as a
+    # dg.Failure carrying promotion_status="blocked_by_quality_gates", and the
+    # previously promoted champion alias must remain untouched (no set_alias).
+    registry = FakeRegistry(gates_passed=False)
+    previous = ModelVersion(
+        name="petrocast-test",
+        version="1",
+        source="runs:/run-previous/model",
+        run_id="run-previous",
+        as_of_date=date(2026, 5, 1),
+        metrics={"eval_model_mae_m3": 9.0},
+        gates_passed=True,
+    )
+    registry.add_version(previous)
+    registry.set_alias(name="petrocast-test", alias="champion", version="1")
+    registry.alias_calls.clear()
+
+    monkeypatch.setattr("petrocast_data.assets.training.get_settings", _settings)
+    monkeypatch.setattr(
+        "petrocast_data.assets.training.create_registry_client",
+        lambda _settings: registry,
+    )
+
+    context = dg.build_asset_context(partition_key="2026-06-01")
+    with pytest.raises(dg.Failure) as exc_info:
+        ml_champion_promotion(context, _candidate(gates_passed=False))
+
+    failure = exc_info.value
+    assert failure.metadata["promotion_status"].value == "blocked_by_quality_gates"
+    assert failure.metadata["mlflow_run_id"].value == "run-candidate"
+
+    # The champion alias never moved: no set_alias call and version 1 still champion.
     assert registry.alias_calls == []
     assert registry.get_by_alias(name="petrocast-test", alias="champion") == previous
