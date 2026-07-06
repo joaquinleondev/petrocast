@@ -15,6 +15,13 @@ module "ecr_data" {
   name   = "${var.project}/data"
 }
 
+# ML pipeline image for Phase-3 training/inference (ADR-0035, F3-23). Push
+# permissions for the CI role are granted when its publish workflow lands.
+module "ecr_ml" {
+  source = "../../modules/ecr"
+  name   = "${var.project}/ml"
+}
+
 module "route53" {
   source = "../../modules/route53"
   domain = var.domain
