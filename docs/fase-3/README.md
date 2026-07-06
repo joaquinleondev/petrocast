@@ -23,13 +23,13 @@ lo promueve como champion y lo sirve por la API REST, con retraining orquestado.
 
 ```mermaid
 flowchart LR
-  A[Feature store\nschema features] --> B[Training\nLightGBM global]
-  B --> C[Tracking\nMLflow runs]
-  B --> D[Evaluación\nMAE/RMSE/MASE + gates]
-  D -->|gates OK| E[Registry\nalias @champion]
-  D -->|gates fail| F[Champion previo\nintacto]
-  E --> G[Serving\nGET /api/v1/predictions]
-  H[Dagster\nretraining_job] --> B
+  A["Feature store<br/>schema features"] --> B["Training<br/>LightGBM global"]
+  B --> C["Tracking<br/>MLflow runs"]
+  B --> D["Evaluación<br/>MAE/RMSE/MASE + gates"]
+  D -->|gates OK| E["Registry<br/>alias @champion"]
+  D -->|gates fail| F["Champion previo<br/>intacto"]
+  E --> G["Serving<br/>GET /api/v1/predictions"]
+  H["Dagster<br/>retraining_job"] --> B
   H --> D
   H --> E
 ```
