@@ -1,6 +1,6 @@
 # ADR-0027: Topología de despliegue de Fase 2
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-10
 - **Autores:** Santino Domato
 - **Decisores:** Equipo Petrocast

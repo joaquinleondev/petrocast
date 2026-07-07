@@ -44,5 +44,22 @@ def get_champion() -> ChampionModel:
         ) from exc
 
 
+def champion_health() -> dict[str, str]:
+    """Serving state of the champion for health reporting.
+
+    Never triggers a model load: the champion loads lazily on the first
+    prediction, so ``not_loaded`` on a fresh process is normal, not a failure.
+    """
+    if _load_cached_champion.cache_info().currsize == 0:
+        configured_uri = f"models:/{settings.mlflow_model_name}@{settings.mlflow_model_alias}"
+        return {"status": "not_loaded", "model_uri": configured_uri}
+    champion = _load_cached_champion()
+    return {
+        "status": "loaded",
+        "model_uri": champion.uri,
+        "model_version": champion.version,
+    }
+
+
 # Convenience type for annotated injection.
 Champion = Annotated[ChampionModel, Depends(get_champion)]

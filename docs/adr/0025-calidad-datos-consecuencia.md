@@ -1,6 +1,6 @@
 # ADR-0025: Estrategia de calidad de datos y consecuencia operativa
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-08
 - **Autores:** Ignacio Vargas Fernández
 - **Decisores:** Equipo Petrocast

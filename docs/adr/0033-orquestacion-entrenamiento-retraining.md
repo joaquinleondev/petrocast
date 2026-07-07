@@ -1,6 +1,6 @@
 # ADR-0033: Orquestación del entrenamiento y retraining con Dagster
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-07-02
 - **Autores:** Santino Domato
 - **Decisores:** Equipo Petrocast

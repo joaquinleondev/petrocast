@@ -1,6 +1,6 @@
 # ADR-0023: Arquitectura medallion (bronze/silver/gold) y motor de transformación (dbt Core v2)
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-08
 - **Autores:** Ignacio Vargas Fernández
 - **Decisores:** Equipo Petrocast

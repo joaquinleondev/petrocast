@@ -1,6 +1,6 @@
 # ADR-0034: Serving del modelo embebido en FastAPI y contrato de API predictiva
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-28
 - **Autores:** Joaquin Leon Alderete
 - **Decisores:** Equipo Petrocast

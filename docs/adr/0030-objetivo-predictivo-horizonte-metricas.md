@@ -1,6 +1,6 @@
 # ADR-0030: Objetivo predictivo, horizonte y métricas de evaluación
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-07-01
 - **Autores:** Ignacio Vargas Fernandez
 - **Decisores:** Equipo Petrocast

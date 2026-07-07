@@ -1,6 +1,6 @@
 # ADR-0029: Plataforma de BI con Metabase OSS
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-06-12
 - **Autores:** Joaquin Leon Alderete
 - **Decisores:** Equipo Petrocast
