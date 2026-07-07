@@ -8,30 +8,43 @@ lo promueve como champion y lo sirve por la API REST, con retraining orquestado.
 
 ### Stack de herramientas
 
-| Componente | Herramienta | Rol |
-|---|---|---|
-| Tracking de experimentos | MLflow OSS (backend Postgres/Supabase) | Runs, params, métricas, tags de contrato |
-| Artefactos de modelo | S3 (`petrocast-ml-artifacts`) | `model.txt`, `metadata.json`, `evaluation.json` |
-| Feature store | dbt sobre PostgreSQL, schema `features` | `well_features`, clave `(well_id, as_of_date)`, point-in-time |
-| Modelo | LightGBM global | Pronóstico multi-horizonte de producción (m³) |
-| Orquestación / retraining | Dagster | `retraining_job` particionado por `as_of_date` + `ScheduleDefinition` |
-| Registry / promoción | MLflow Model Registry, alias `@champion` | Promoción con guard de gates + rollback |
-| Serving | FastAPI (embebido) | `GET /api/v1/predictions` carga `models:/petrocast-production@champion` |
-| CI/CD ML | GitHub Actions + ECR | Smokes de entrenamiento→registro→inferencia, imagen `petrocast/ml` |
+| Componente                | Herramienta                              | Rol                                                                     |
+| ------------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| Tracking de experimentos  | MLflow OSS (backend Postgres/Supabase)   | Runs, params, métricas, tags de contrato                                |
+| Artefactos de modelo      | S3 (`petrocast-ml-artifacts`)            | `model.txt`, `metadata.json`, `evaluation.json`                         |
+| Feature store             | dbt sobre PostgreSQL, schema `features`  | `well_features`, clave `(well_id, as_of_date)`, point-in-time           |
+| Modelo                    | LightGBM global                          | Pronóstico multi-horizonte de producción (m³)                           |
+| Orquestación / retraining | Dagster                                  | `retraining_job` particionado por `as_of_date` + `ScheduleDefinition`   |
+| Registry / promoción      | MLflow Model Registry, alias `@champion` | Promoción con guard de gates + rollback                                 |
+| Serving                   | FastAPI (embebido)                       | `GET /api/v1/predictions` carga `models:/petrocast-production@champion` |
+| CI/CD ML                  | GitHub Actions + ECR                     | Smokes de entrenamiento→registro→inferencia, imagen `petrocast/ml`      |
 
 ### Flujo end-to-end
 
 ```mermaid
 flowchart LR
-  A["Feature store<br/>schema features"] --> B["Training<br/>LightGBM global"]
-  B --> C["Tracking<br/>MLflow runs"]
-  B --> D["Evaluación<br/>MAE/RMSE/MASE + gates"]
-  D -->|gates OK| E["Registry<br/>alias @champion"]
-  D -->|gates fail| F["Champion previo<br/>intacto"]
-  E --> G["Serving<br/>GET /api/v1/predictions"]
-  H["Dagster<br/>retraining_job"] --> B
-  H --> D
-  H --> E
+  subgraph job["retraining_job · Dagster · schedule mensual"]
+    direction LR
+    A["<b>Feature store</b><br/>schema features<br/>point-in-time"] --> B["<b>Training</b><br/>LightGBM global"]
+    B --> D{"<b>Evaluación</b><br/>MAE / RMSE / MASE<br/>+ gates de calidad"}
+  end
+
+  B -.->|"loguea run"| C["<b>Tracking</b><br/>MLflow runs"]
+  D -->|"gates OK"| E["<b>Registry</b><br/>alias @champion"]
+  D -->|"gates fail"| F["<b>Champion previo</b><br/>intacto — no se pisa"]
+  E --> G["<b>Serving</b><br/>GET /api/v1/predictions"]
+
+  classDef store fill:#e8eef7,stroke:#5a7fb0,color:#12263a;
+  classDef track fill:#efeaf7,stroke:#8a6db0,color:#241238;
+  classDef okpath fill:#e3f2e6,stroke:#4a9d5f,color:#123a1c;
+  classDef failpath fill:#faece0,stroke:#c98a4a,color:#4a2c12;
+  classDef serve fill:#1168bd,stroke:#0b4884,color:#ffffff;
+  class A,B store;
+  class C track;
+  class D,E okpath;
+  class F failpath;
+  class G serve;
+  style job fill:none,stroke:#5a7fb0,stroke-dasharray:5 5,color:#3a5a80;
 ```
 
 Clave de diseño: un retrain que no pasa los gates de calidad **no pisa** el champion
@@ -39,14 +52,14 @@ vigente; el candidato queda trazado en MLflow pero el alias no se mueve.
 
 ## Decisiones (ADRs)
 
-| ADR | Decisión |
-|---|---|
+| ADR                                                               | Decisión                                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | [ADR-0030](../adr/0030-objetivo-predictivo-horizonte-metricas.md) | Objetivo predictivo, horizonte y métricas de evaluación (MAE/RMSE/MASE + gates) |
-| [ADR-0031](../adr/0031-estrategia-feature-store.md) | Estrategia de feature store (dbt, schema `features`, point-in-time) |
-| [ADR-0032](../adr/0032-tracking-experimentos-registry.md) | Tracking de experimentos y registry de modelos con MLflow |
-| [ADR-0033](../adr/0033-orquestacion-entrenamiento-retraining.md) | Orquestación del entrenamiento y retraining con Dagster |
-| [ADR-0034](../adr/0034-serving-modelo-contrato-api.md) | Serving del modelo embebido en FastAPI y contrato de API predictiva |
-| [ADR-0035](../adr/0035-cicd-pipelines-ml-promocion.md) | CI/CD de pipelines ML y promoción de artefactos |
+| [ADR-0031](../adr/0031-estrategia-feature-store.md)               | Estrategia de feature store (dbt, schema `features`, point-in-time)             |
+| [ADR-0032](../adr/0032-tracking-experimentos-registry.md)         | Tracking de experimentos y registry de modelos con MLflow                       |
+| [ADR-0033](../adr/0033-orquestacion-entrenamiento-retraining.md)  | Orquestación del entrenamiento y retraining con Dagster                         |
+| [ADR-0034](../adr/0034-serving-modelo-contrato-api.md)            | Serving del modelo embebido en FastAPI y contrato de API predictiva             |
+| [ADR-0035](../adr/0035-cicd-pipelines-ml-promocion.md)            | CI/CD de pipelines ML y promoción de artefactos                                 |
 
 ## Cómo correr
 
@@ -100,11 +113,11 @@ Checklist:
 
 ## Mapa de documentación de Fase 3
 
-| Documento | Qué cubre |
-|---|---|
-| [`model-card.md`](model-card.md) | Model card del champion `petrocast-production` |
-| [`backtesting-report.md`](backtesting-report.md) | Reporte de backtesting y gates de calidad |
-| [`demo-tracking-api.md`](demo-tracking-api.md) | Guía de evidencia demo (tracking, API, retraining) |
-| [`apps/ml/README.md`](../../apps/ml/README.md) | Guía del paquete ML: features, training, tracking, registry, inferencia |
-| [`docs/runbooks/ml-promotion.md`](../runbooks/ml-promotion.md) | Promoción y rollback del champion |
-| [`docs/adr/README.md`](../adr/README.md) | Índice completo de ADRs |
+| Documento                                                      | Qué cubre                                                               |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`model-card.md`](model-card.md)                               | Model card del champion `petrocast-production`                          |
+| [`backtesting-report.md`](backtesting-report.md)               | Reporte de backtesting y gates de calidad                               |
+| [`demo-tracking-api.md`](demo-tracking-api.md)                 | Guía de evidencia demo (tracking, API, retraining)                      |
+| [`apps/ml/README.md`](../../apps/ml/README.md)                 | Guía del paquete ML: features, training, tracking, registry, inferencia |
+| [`docs/runbooks/ml-promotion.md`](../runbooks/ml-promotion.md) | Promoción y rollback del champion                                       |
+| [`docs/adr/README.md`](../adr/README.md)                       | Índice completo de ADRs                                                 |

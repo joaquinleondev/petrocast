@@ -69,16 +69,17 @@ erDiagram
 
 Vista esquemática (fact central + 3 dimensiones desnormalizadas):
 
-```
-          dim_company                       dim_date
-              │                                 │
-        company_key                          date_key
-              │                                 │
-              └──────────► fact_production ◄─────┘
-                                ▲
-                            well_key
-                                │
-                            dim_well
+```mermaid
+flowchart LR
+  well["<b>dim_well</b><br/>un pozo"] -->|well_key| fact
+  company["<b>dim_company</b><br/>una operadora"] -->|company_key| fact
+  date["<b>dim_date</b><br/>un mes"] -->|date_key| fact
+  fact["<b>fact_production</b><br/>1 fila por pozo × mes<br/>oil / gas / water (m³)"]
+
+  classDef dim fill:#e8eef7,stroke:#5a7fb0,color:#12263a;
+  classDef facttbl fill:#1168bd,stroke:#0b4884,color:#ffffff;
+  class well,company,date dim;
+  class fact facttbl;
 ```
 
 ## Grano de la tabla de hechos
@@ -86,11 +87,11 @@ Vista esquemática (fact central + 3 dimensiones desnormalizadas):
 `fact_production` tiene grano de **una fila por pozo y mes de producción**
 (`well_id` × `production_month`). Cada fila mide la producción del período:
 
-| Medida | Tipo | Significado |
-|---|---|---|
-| `oil_prod_m3` | numeric | Producción de petróleo del mes (m³) |
-| `gas_prod_mm3` | numeric | Producción de gas del mes (Mm³) |
-| `water_prod_m3` | numeric | Producción de agua del mes (m³) |
+| Medida          | Tipo    | Significado                         |
+| --------------- | ------- | ----------------------------------- |
+| `oil_prod_m3`   | numeric | Producción de petróleo del mes (m³) |
+| `gas_prod_mm3`  | numeric | Producción de gas del mes (Mm³)     |
+| `water_prod_m3` | numeric | Producción de agua del mes (m³)     |
 
 La clave primaria `production_key` es un hash determinístico de
 `(well_id, production_month)`, lo que fija el grano y habilita el upsert
@@ -99,11 +100,11 @@ degeneradas** en el hecho para filtrar sin join.
 
 ## Dimensiones
 
-| Dimensión | Grano | Clave de negocio | Surrogate key |
-|---|---|---|---|
-| `dim_well` | un pozo | `well_id` (idpozo) | `well_key` = hash(`well_id`) |
-| `dim_company` | una operadora | `company_id` (idempresa) | `company_key` = hash(`company_id`) |
-| `dim_date` | un mes | `production_month` | `date_key` = hash(`production_month`) |
+| Dimensión     | Grano         | Clave de negocio         | Surrogate key                         |
+| ------------- | ------------- | ------------------------ | ------------------------------------- |
+| `dim_well`    | un pozo       | `well_id` (idpozo)       | `well_key` = hash(`well_id`)          |
+| `dim_company` | una operadora | `company_id` (idempresa) | `company_key` = hash(`company_id`)    |
+| `dim_date`    | un mes        | `production_month`       | `date_key` = hash(`production_month`) |
 
 - **`dim_well`** — universo = unión de pozos en `silver_wells` (registro) y
   `silver_production`, de modo que todo pozo del hecho tiene fila de dimensión

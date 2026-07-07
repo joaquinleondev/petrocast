@@ -4,15 +4,27 @@ Petrocast a través de las tres fases: ingesta y datos (F2), pronóstico ML (F3)
 API pública (F1+F3).
 
 ```mermaid
-C4Context
-  title Contexto — Petrocast
-  Person(analyst, "Analista / Consumidor", "Consulta producción y pronósticos")
-  System(petrocast, "Petrocast", "Plataforma de datos + pronóstico de producción")
-  System_Ext(datagov, "datos.gob.ar", "Fuente pública de producción de hidrocarburos")
-  System_Ext(mlflow, "MLflow", "Tracking y registry de modelos (backend Postgres + S3)")
-  Rel(analyst, petrocast, "Consulta API REST / BI")
-  Rel(petrocast, datagov, "Ingesta datos de producción")
-  Rel(petrocast, mlflow, "Loguea runs, promueve champion")
+flowchart LR
+  analyst["<b>Analista / Consumidor</b><br/><i>Persona</i><br/>Consulta producción y pronósticos"]
+
+  subgraph boundary["Sistema Petrocast"]
+    petrocast["<b>Petrocast</b><br/><i>Plataforma de datos +<br/>pronóstico de producción</i>"]
+  end
+
+  datagov["<b>datos.gob.ar</b><br/><i>Sistema externo</i><br/>Producción pública de hidrocarburos"]
+  mlflow["<b>MLflow</b><br/><i>Sistema externo</i><br/>Tracking + registry de modelos<br/>(backend Postgres + S3)"]
+
+  analyst -->|"Consulta API REST / BI"| petrocast
+  petrocast -->|"Ingesta producción"| datagov
+  petrocast -->|"Loguea runs, promueve champion"| mlflow
+
+  classDef person fill:#08427b,stroke:#052e56,color:#ffffff;
+  classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff;
+  classDef ext fill:#7a8288,stroke:#565c61,color:#ffffff;
+  class analyst person;
+  class petrocast system;
+  class datagov,mlflow ext;
+  style boundary fill:none,stroke:#1168bd,stroke-dasharray:5 5,color:#1168bd;
 ```
 
 - **Fase 1** — API REST + observabilidad + despliegue AWS.

@@ -42,10 +42,10 @@ upstream/downstream.
 
 `dbt docs generate` produce dos archivos en `apps/data/dbt/target/`:
 
-| Archivo | Contenido |
-|---|---|
+| Archivo         | Contenido                                                             |
+| --------------- | --------------------------------------------------------------------- |
 | `manifest.json` | Grafo de dependencias entre modelos, SQL compilado, tests y metadatos |
-| `catalog.json` | Tipos de columnas y estadísticas consultadas al warehouse en vivo |
+| `catalog.json`  | Tipos de columnas y estadísticas consultadas al warehouse en vivo     |
 
 Estos artefactos son el input estándar para la fuente dbt de DataHub (y para el
 visor `dbt docs serve`). El directorio `target/` está en `.gitignore`; los archivos
@@ -115,7 +115,7 @@ source:
 sink:
   type: datahub-rest
   config:
-    server: "http://localhost:8080"  # GMS de DataHub (docker compose)
+    server: "http://localhost:8080" # GMS de DataHub (docker compose)
 ```
 
 Además de esta fuente dbt, F2-21 agregará la fuente PostgreSQL para ingestar el
