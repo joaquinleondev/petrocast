@@ -180,10 +180,8 @@ docker compose --env-file apps/data/.env \
 Debe dar ~**410.000 filas**, de `2006-01-01` a `2026-05-01`. Si da **0**, no
 falló nada: materializaste una partición sin datos (ver §1.4.1).
 
-Silver termina con **3 warnings** (`PASS=13 WARN=3 ERROR=0`) y eso está bien:
-son 3 filas con producción negativa en 410.945 (rectificaciones de DDJJ del
-dataset original). Los tests de rango están en `severity: warn` a propósito y
-las filas quedan persistidas en el schema `dbt_test__audit` (ADR-0025). Un
+Silver termina con **1 warning** (`PASS=15 WARN=1 ERROR=0`) y eso está bien: el
+único check no bloqueante es el de *recency* (frescura), por contrato F2-18. Un
 warning de dbt **no** deja el asset en rojo.
 
 #### 1.4.1 Qué significa la partición en cada capa (leer antes de materializar)
