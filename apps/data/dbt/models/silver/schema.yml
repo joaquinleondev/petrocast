@@ -78,7 +78,9 @@ models:
           - dbt_utils.not_null_proportion:
               arguments:
                 at_least: 0.9
-          # Range dimension: production cannot be negative.
+          # Range dimension: production cannot be negative. Blocking on purpose
+          # (F2-18): the source's negative months are nulled out in
+          # silver_production, so a hit here means a real regression.
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0

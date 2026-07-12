@@ -30,9 +30,14 @@ renamed as (
     select
         cast(idpozo as text) as well_id,
         cast(idempresa as text) as company_id,
-        cast(nullif(trim(prod_pet), '') as numeric) as oil_prod_m3,
-        cast(nullif(trim(prod_gas), '') as numeric) as gas_prod_mm3,
-        cast(nullif(trim(prod_agua), '') as numeric) as water_prod_m3,
+        -- Negative production is not a real measurement: the source publishes a
+        -- handful of negative months (rectificaciones de DDJJ — 3 rows in 410k
+        -- as of 2026-05). Treat them as unknown, same as the blanks above,
+        -- instead of clamping to 0 (which would assert the well produced
+        -- nothing). Keeps the accepted_range checks blocking (F2-18).
+        {{ non_negative("prod_pet") }} as oil_prod_m3,
+        {{ non_negative("prod_gas") }} as gas_prod_mm3,
+        {{ non_negative("prod_agua") }} as water_prod_m3,
         cast(_dlt_load_id as text) as dlt_load_id,
         nullif(trim(empresa), '') as company_name,
         nullif(trim(sigla), '') as well_alias,
