@@ -105,12 +105,14 @@ Solo aplica si el stack no corre en la misma máquina desde la que grabás (caso
 de Joaquin: server Linux por SSH, grabación desde la Mac, misma tailnet). Dos
 escollos, ambos ya contemplados en el compose:
 
-- **MLflow responde `400 Invalid Host header`.** MLflow valida el header `Host`
-  contra DNS rebinding, y por `tailscale serve` llega el DNS de la tailnet, no
-  `localhost`. Agregar el host propio en `apps/data/.env`:
+- **MLflow responde `403 Invalid Host header`.** MLflow ≥ 3 valida el header
+  `Host` contra DNS rebinding, y por `tailscale serve` llega el DNS de la
+  tailnet, no `localhost`. Agregar el host propio en `apps/data/.env`, **sin
+  perder los del default** (el match es contra el header completo, por eso van
+  también las variantes con `:5000`):
 
   ```bash
-  PETROCAST_MLFLOW_ALLOWED_HOSTS=localhost,127.0.0.1,mlflow,<host>.ts.net,<host>.ts.net:*
+  PETROCAST_MLFLOW_ALLOWED_HOSTS=localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,mlflow,mlflow:5000,<host>.ts.net,<host>.ts.net:*
   ```
 
 - **Dagster no levanta: `bind 0.0.0.0:3000: address already in use`.**
