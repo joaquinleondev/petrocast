@@ -29,6 +29,11 @@ services:
       PETROCAST_DW_USER: ${PETROCAST_DW_USER:-}
       PETROCAST_DW_PASSWORD: ${PETROCAST_DW_PASSWORD:-}
       PETROCAST_DW_PORT: ${PETROCAST_DW_PORT:-5432}
+      # Host headers que el server acepta (MLflow los valida contra DNS
+      # rebinding y responde 400 a cualquier otro). Ampliar si se llega a la UI
+      # por un nombre distinto de localhost — p. ej. un reverse proxy o un
+      # `tailscale serve`, donde el Host es el DNS de la tailnet.
+      PETROCAST_MLFLOW_ALLOWED_HOSTS: ${PETROCAST_MLFLOW_ALLOWED_HOSTS:-localhost,127.0.0.1,mlflow}
       # S3 credentials for the artifact store (unused in local fallback).
       # AWS_SESSION_TOKEN is required for temporary/SSO credentials, which is how
       # the team reaches the bucket (the org SCP forbids static IAM users).
@@ -58,7 +63,7 @@ services:
           --backend-store-uri="$${backend_uri}" \
           --serve-artifacts \
           --artifacts-destination="$${PETROCAST_MLFLOW_ARTIFACT_ROOT}" \
-          --allowed-hosts="localhost,127.0.0.1,mlflow"
+          --allowed-hosts="$${PETROCAST_MLFLOW_ALLOWED_HOSTS}"
     networks:
       - petrocast_data
     restart: unless-stopped

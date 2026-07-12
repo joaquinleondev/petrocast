@@ -51,7 +51,11 @@ services:
     ports:
       # Grafana (compose.observability.yml) also publishes 3000; override the
       # host port to run both stacks at once.
-      - "${PETROCAST_DAGSTER_PORT:-3000}:3000"
+      # PETROCAST_DAGSTER_BIND pins the host interface. Default 0.0.0.0 (todas).
+      # Ponerlo en 127.0.0.1 cuando la UI se expone por `tailscale serve`: el
+      # proxy escucha el mismo puerto en la IP de la tailnet, y publicar en
+      # 0.0.0.0 se lo pisa ("address already in use").
+      - "${PETROCAST_DAGSTER_BIND:-0.0.0.0}:${PETROCAST_DAGSTER_PORT:-3000}:3000"
     volumes:
       - dagster_home:/opt/dagster/dagster_home
     command:
