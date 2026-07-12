@@ -27,9 +27,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DAGSTER_HOME="/opt/dagster/dagster_home" \
     DBT_PROFILES_DIR="/app/apps/data/dbt"
 
+# libgomp1: OpenMP runtime that lightgbm loads via ctypes at import time. The
+# definitions module imports petrocast_ml, so without it Dagster fails to load
+# with "libgomp.so.1: cannot open shared object file".
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends git libgomp1 && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -g 10001 app && \
     useradd -r -u 10001 -g app app

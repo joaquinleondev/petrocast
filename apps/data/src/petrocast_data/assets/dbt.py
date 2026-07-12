@@ -69,4 +69,10 @@ def gold_dbt_assets(
         "min_month": time_window.start.strftime("%Y-%m-%d"),
         "max_month": time_window.end.strftime("%Y-%m-%d"),
     }
-    yield from dbt.cli(["build", "--vars", json.dumps(dbt_vars)], context=context).stream()
+    # cautious: the features PIT singular test refs fact_production AND
+    # well_features; eager indirect selection would run it here, before the
+    # features table exists. It runs with the feature store assets instead.
+    yield from dbt.cli(
+        ["build", "--vars", json.dumps(dbt_vars), "--indirect-selection", "cautious"],
+        context=context,
+    ).stream()

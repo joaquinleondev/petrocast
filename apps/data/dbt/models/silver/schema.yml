@@ -78,10 +78,16 @@ models:
           - dbt_utils.not_null_proportion:
               arguments:
                 at_least: 0.9
-          # Range dimension: production cannot be negative.
+          # Range dimension: production cannot be negative. Warn, not error:
+          # the source publishes a handful of negative months (rectificaciones
+          # de DDJJ — 3 filas en 410k al 2026-05). Failing the build on them
+          # would block every historical rebuild; store_failures keeps the
+          # offending rows in `<schema>_dbt_test__audit` for review (ADR-0025).
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: gas_prod_mm3
         data_type: numeric
         description: Monthly gas production in thousands of m3 (prod_gas).
@@ -92,6 +98,8 @@ models:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: water_prod_m3
         data_type: numeric
         description: Monthly water production in m3 (prod_agua).
@@ -102,6 +110,8 @@ models:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: resource_type
         data_type: text
         description: Resource type (tipo_de_recurso).
