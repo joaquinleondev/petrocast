@@ -31,7 +31,7 @@ Ver [Robustez temporal](#robustez-temporal-gates-en-cinco-cortes).
 
 ## Metodología
 
-- **Contrato F (ADR-0030):** split *single-origin*. Se entrena con todo lo
+- **Contrato F (ADR-0030):** split _single-origin_. Se entrena con todo lo
   observable antes del corte `as_of` y se evalúa sobre los meses target
   `as_of + (h − 1)` para `h ∈ {1, 2, 3}` (para 2026-02-01: feb, mar y abr
   2026). Sin ventanas deslizantes: un origen, tres horizontes.
@@ -44,37 +44,37 @@ Ver [Robustez temporal](#robustez-temporal-gates-en-cinco-cortes).
   imputan). Pozos con historia plana (denominador 0) quedan con MASE
   indefinido y se reportan aparte.
 - **Baselines:**
-  - *Naive de persistencia:* repetir el último valor observado antes del
+  - _Naive de persistencia:_ repetir el último valor observado antes del
     corte.
-  - *Arps:* ajuste de declinación hiperbólica por pozo (implementación
+  - _Arps:_ ajuste de declinación hiperbólica por pozo (implementación
     propia con `scipy.optimize`, F3-15) sobre la historia pre-corte;
     comparación por MAPE sobre targets positivos.
 - **Unidades:** todo en **m³** de petróleo por pozo-mes.
-- La materialización del feature store es *point-in-time* (contrato A,
+- La materialización del feature store es _point-in-time_ (contrato A,
   ADR-0031): cada corte usa exclusivamente meses anteriores a `as_of`; el
   test singular anti-leakage corrió y pasó en los 24 cortes materializados.
 
 ## Cobertura (corte 2026-02-01)
 
-| Métrica | Valor |
-| --- | ---: |
-| Pozos en el split de test | 4.773 |
-| Pozos elegibles (≥ 12 meses de historia) | 4.320 |
-| Pozos excluidos por historia corta | 453 |
-| Pozos elegibles con MASE indefinido (historia plana) | 575 |
-| Pozos con ajuste Arps exitoso | 3.622 |
-| Pozos con ajuste Arps fallido | 698 |
-| Comparación Arps degradada | No |
-| Filas de entrenamiento | 284.923 |
-| Filas de test | 14.314 |
+| Métrica                                              |   Valor |
+| ---------------------------------------------------- | ------: |
+| Pozos en el split de test                            |   4.773 |
+| Pozos elegibles (≥ 12 meses de historia)             |   4.320 |
+| Pozos excluidos por historia corta                   |     453 |
+| Pozos elegibles con MASE indefinido (historia plana) |     575 |
+| Pozos con ajuste Arps exitoso                        |   3.622 |
+| Pozos con ajuste Arps fallido                        |     698 |
+| Comparación Arps degradada                           |      No |
+| Filas de entrenamiento                               | 284.923 |
+| Filas de test                                        |  14.314 |
 
 ## Gates de calidad (ADR-0030)
 
-| Gate | Umbral | Valor | Veredicto | ¿Bloqueante? |
-| --- | ---: | ---: | :---: | :---: |
-| MASE mediano per-well | < 1,0 | 0,403 | ✅ pasa | Sí |
-| MAE agregado vs naive (ratio) | ≤ 1,0 | 0,868 | ✅ pasa | Sí |
-| MAPE mediano vs Arps (gap, pp) | ≤ +2,0 | −18,1 | ✅ pasa | No (informativo) |
+| Gate                           | Umbral | Valor | Veredicto |   ¿Bloqueante?   |
+| ------------------------------ | -----: | ----: | :-------: | :--------------: |
+| MASE mediano per-well          |  < 1,0 | 0,403 |  ✅ pasa  |        Sí        |
+| MAE agregado vs naive (ratio)  |  ≤ 1,0 | 0,868 |  ✅ pasa  |        Sí        |
+| MAPE mediano vs Arps (gap, pp) | ≤ +2,0 | −18,1 |  ✅ pasa  | No (informativo) |
 
 Un gate bloqueante fallido registra la corrida igual (métricas `eval_*` y tag
 `gates_passed=false` en MLflow) pero **impide la promoción a champion** —
@@ -82,9 +82,9 @@ comportamiento verificado en la corrida 2026-03-01.
 
 ## Modelo vs naive (m³)
 
-| Métrica agregada | Modelo | Naive | Ratio |
-| --- | ---: | ---: | ---: |
-| MAE (m³/pozo-mes) | 98,52 | 113,52 | 0,868 |
+| Métrica agregada  | Modelo |  Naive | Ratio |
+| ----------------- | -----: | -----: | ----: |
+| MAE (m³/pozo-mes) |  98,52 | 113,52 | 0,868 |
 
 Lectura: el grueso de la mejora del modelo está en el pozo típico (ver
 distribuciones); en volumen agregado —dominado por los pozos de mayor
@@ -103,13 +103,13 @@ Distribución sobre pozos elegibles (percentiles 50/75/90). La cola alta
 (p90) muestra dónde el modelo todavía falla: pozos intermitentes o con
 quiebres de régimen.
 
-| Métrica per-well | p50 | p75 | p90 |
-| --- | ---: | ---: | ---: |
-| MASE | 0,403 | 0,946 | 2,272 |
-| MAE modelo (m³) | 6,46 | 92,99 | 303,22 |
-| MAE naive (m³) | 2,36 | 93,88 | 331,90 |
-| MAPE modelo (%, targets > 0) | 29,9 | 86,4 | 414,4 |
-| MAPE Arps (%, targets > 0) | 48,0 | 98,2 | 343,4 |
+| Métrica per-well             |   p50 |   p75 |    p90 |
+| ---------------------------- | ----: | ----: | -----: |
+| MASE                         | 0,403 | 0,946 |  2,272 |
+| MAE modelo (m³)              |  6,46 | 92,99 | 303,22 |
+| MAE naive (m³)               |  2,36 | 93,88 | 331,90 |
+| MAPE modelo (%, targets > 0) |  29,9 |  86,4 |  414,4 |
+| MAPE Arps (%, targets > 0)   |  48,0 |  98,2 |  343,4 |
 
 Notas de lectura:
 
@@ -128,13 +128,13 @@ El mismo pipeline (datos → features PIT → entrenamiento → evaluación →
 promoción) corrió para cinco cortes. Champion = último candidato que pasó
 los gates (2026-02-01).
 
-| Corte | MASE mediano | Ratio MAE vs naive | Gap Arps (pp) | Gates |
-| --- | ---: | ---: | ---: | :---: |
-| 2025-09-01 | 0,431 | 0,876 | −20,9 | ✅ |
-| 2025-12-01 | 0,397 | 0,905 | −18,0 | ✅ |
-| 2026-01-01 | 0,394 | 0,885 | −19,0 | ✅ |
-| 2026-02-01 | 0,403 | 0,868 | −18,1 | ✅ (champion) |
-| 2026-03-01 | 0,463 | 1,037 | −17,7 | ❌ bloqueado |
+| Corte      | MASE mediano | Ratio MAE vs naive | Gap Arps (pp) |     Gates     |
+| ---------- | -----------: | -----------------: | ------------: | :-----------: |
+| 2025-09-01 |        0,431 |              0,876 |         −20,9 |      ✅       |
+| 2025-12-01 |        0,397 |              0,905 |         −18,0 |      ✅       |
+| 2026-01-01 |        0,394 |              0,885 |         −19,0 |      ✅       |
+| 2026-02-01 |        0,403 |              0,868 |         −18,1 | ✅ (champion) |
+| 2026-03-01 |        0,463 |              1,037 |         −17,7 | ❌ bloqueado  |
 
 El corte 2026-03-01 falla el gate agregado: sus targets (mar–may 2026) son
 los meses más recientes del dataset, donde las declaraciones juradas todavía
@@ -151,7 +151,7 @@ Sobre los datos reales ingeridos (no sobre fixtures):
   esta evaluación, pero es un caso a resolver en la capa de datos).
 - **575 pozos elegibles con historia plana** (MASE indefinido): pozos que
   reportan valores idénticos mes a mes — probable relleno administrativo.
-- El test de *recency* de silver avisa (WARN) que el último mes disponible
+- El test de _recency_ de silver avisa (WARN) que el último mes disponible
   (2026-05) está a ~2 meses del presente: rezago normal de publicación de
   capítulo IV.
 

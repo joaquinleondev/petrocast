@@ -51,10 +51,10 @@ MLFLOW_TRACKING_URI=http://localhost:5000 \
 
 El script entrena dos veces contra los fixtures de `apps/ml/tests/fixtures`:
 
-| Run | Corte | Horizontes | Resultado esperado |
-| --- | --- | --- | --- |
-| `horizon-1` | `2026-01-01` | `1` | Run registrado con MAE/RMSE del modelo y naive baseline |
-| `horizon-1-2-3` | `2026-01-01` | `1,2,3` | Run registrado con métricas distintas al primer run |
+| Run             | Corte        | Horizontes | Resultado esperado                                      |
+| --------------- | ------------ | ---------- | ------------------------------------------------------- |
+| `horizon-1`     | `2026-01-01` | `1`        | Run registrado con MAE/RMSE del modelo y naive baseline |
+| `horizon-1-2-3` | `2026-01-01` | `1,2,3`    | Run registrado con métricas distintas al primer run     |
 
 Resultados esperados con los fixtures actuales:
 
@@ -88,14 +88,14 @@ infra/scripts/demo/f3-21-demo-evidence.sh api-offline
 
 Escenarios cubiertos:
 
-| Escenario | Request | Resultado esperado |
-| --- | --- | --- |
-| Happy path | `POZO-001`, `2024-03-15`, horizonte `3` | `200`, tres meses predichos |
-| Cruce de año | `POZO-001`, `2024-12-31`, horizonte `2` | `200`, meses `2025-01-01` y `2025-02-01` |
-| Pozo sin features | `POZO-003`, `2024-03-15`, horizonte `3` | `404`, mensaje `no persisted features` |
-| Horizonte inválido | horizonte `13` | `422` |
-| API key faltante | sin header `X-API-Key` | `403` |
-| Modelo o warehouse caído | dependencias forzadas a fallar | `503` |
+| Escenario                | Request                                 | Resultado esperado                       |
+| ------------------------ | --------------------------------------- | ---------------------------------------- |
+| Happy path               | `POZO-001`, `2024-03-15`, horizonte `3` | `200`, tres meses predichos              |
+| Cruce de año             | `POZO-001`, `2024-12-31`, horizonte `2` | `200`, meses `2025-01-01` y `2025-02-01` |
+| Pozo sin features        | `POZO-003`, `2024-03-15`, horizonte `3` | `404`, mensaje `no persisted features`   |
+| Horizonte inválido       | horizonte `13`                          | `422`                                    |
+| API key faltante         | sin header `X-API-Key`                  | `403`                                    |
+| Modelo o warehouse caído | dependencias forzadas a fallar          | `503`                                    |
 
 ### Opción con API local
 

@@ -113,12 +113,23 @@ escollos, ambos ya contemplados en el compose:
   PETROCAST_MLFLOW_ALLOWED_HOSTS=localhost,127.0.0.1,mlflow,<host>.ts.net,<host>.ts.net:*
   ```
 
-- **Dagster no levanta: `bind 0.0.0.0:3000: address already in use`.**
-  `tailscale serve` ya escucha el 3000 en la IP de la tailnet, y `0.0.0.0` la
-  incluye. Publicar Dagster solo en loopback y dejar que Tailscale proxee:
+- **La UI de MLflow carga pero no muestra runs ni modelos**, y en los logs del
+  compose aparece `Blocked cross-origin request from https://<host>.ts.net:5000`.
+  Es la protección CORS del server (default: solo orígenes `localhost`), aparte
+  de la validación de Host. Permitir el origen de la tailnet:
+
+  ```bash
+  PETROCAST_MLFLOW_ALLOWED_ORIGINS=http://localhost:5000,http://127.0.0.1:5000,https://<host>.ts.net:5000
+  ```
+
+- **Dagster o MLflow no levantan: `bind 0.0.0.0:3000/5000: address already in
+  use`.** `tailscale serve` ya escucha esos puertos en la IP de la tailnet, y
+  `0.0.0.0` la incluye. Publicar ambos solo en loopback y dejar que Tailscale
+  proxee:
 
   ```bash
   PETROCAST_DAGSTER_BIND=127.0.0.1
+  PETROCAST_MLFLOW_BIND=127.0.0.1
   ```
 
 Dagster no valida el `Host`, así que no necesita nada más. La API del bloque 4
@@ -181,17 +192,17 @@ Debe dar ~**410.000 filas**, de `2006-01-01` a `2026-05-01`. Si da **0**, no
 falló nada: materializaste una partición sin datos (ver §1.4.1).
 
 Silver termina con **1 warning** (`PASS=15 WARN=1 ERROR=0`) y eso está bien: el
-único check no bloqueante es el de *recency* (frescura), por contrato F2-18. Un
+único check no bloqueante es el de _recency_ (frescura), por contrato F2-18. Un
 warning de dbt **no** deja el asset en rojo.
 
 #### 1.4.1 Qué significa la partición en cada capa (leer antes de materializar)
 
 La misma palabra quiere decir dos cosas distintas en capas contiguas:
 
-| Capa              | Qué significa la partición          | Efecto real en los datos                                                       |
-| ----------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
-| **bronze**        | Sello operacional: cuándo se ingirió | **Ninguno.** Siempre baja el dataset completo y **reemplaza** la tabla entera  |
-| **silver / gold** | Ventana temporal: `min`/`max_month` | **Filtra de verdad.** Construye solo los meses del rango (delete+insert)       |
+| Capa              | Qué significa la partición           | Efecto real en los datos                                                      |
+| ----------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| **bronze**        | Sello operacional: cuándo se ingirió | **Ninguno.** Siempre baja el dataset completo y **reemplaza** la tabla entera |
+| **silver / gold** | Ventana temporal: `min`/`max_month`  | **Filtra de verdad.** Construye solo los meses del rango (delete+insert)      |
 
 Dos consecuencias prácticas:
 
@@ -211,8 +222,46 @@ Dos consecuencias prácticas:
 ### 1.5 Poblar MLflow y dejar el champion listo (corridas históricas)
 
 Esto genera los "distintos runs con métricas distintas" que pide la adenda y
-deja un champion promovido para que la API funcione. Se hace **desde la UI de
-Dagster** (así el video en vivo repite exactamente el mismo flujo):
+deja un champion promovido para que la API funcione.
+
+#### 1.5.0 Backfill del histórico de features (primero, una sola vez)
+
+El training carga **todos** los cortes persistidos anteriores al de la
+partición para armar train/validation; el `retraining_job` solo materializa
+el corte propio. En un warehouse recién cargado no hay histórico y el training
+falla con `ValueError: no training cutoffs older than <partición>
+(validation_cutoffs=0)`. Hay que backfillear los mismos cortes que usó el
+[reporte de backtesting](backtesting-report.md): `2024-04-01 … 2025-11-01`
+(los 4 restantes hasta `2026-03-01` los agregan los propios retraining runs).
+
+En la UI de Dagster: asset `features/well_features` → **Materialize** → rango
+`2024-04-01 … 2025-11-01` → Launch backfill. La política de backfill de
+features es `multi_run(max 1)`, así que son **20 runs** de ~15-30 s cada uno
+(⏱️ ~5-10 min en total). Equivalente por CLI:
+
+```bash
+for m in 2024-{04..12}-01 2025-{01..11}-01; do
+  docker compose --env-file apps/data/.env \
+    -f infra/compose.data.yml -f infra/compose.mlflow.yml \
+    exec dagster dagster asset materialize \
+    --select "features/well_features" --partition "$m" \
+    -m petrocast_data.definitions
+done
+```
+
+Verificar (debe dar 20 cortes, `2024-04-01` a `2025-11-01`):
+
+```bash
+docker compose --env-file apps/data/.env \
+  -f infra/compose.data.yml -f infra/compose.mlflow.yml \
+  exec data-postgres psql -U petrocast -d petrocast \
+  -c "SELECT count(DISTINCT as_of_date), min(as_of_date), max(as_of_date) FROM features.well_features;"
+```
+
+#### 1.5.1 Corridas históricas del retraining
+
+Se hace **desde la UI de Dagster** (así el video en vivo repite exactamente el
+mismo flujo):
 
 1. Ir a **Jobs** → **`retraining_job`**.
 2. Click en **Materialize all** → elegir la partición **`2025-12-01`** → Launch.
@@ -314,6 +363,7 @@ Correr TODO esto la noche anterior. Si algo falla, no grabar hasta arreglarlo.
 
 - [ ] `http://localhost:3000` (Dagster) y `http://localhost:5000` (MLflow) cargan.
 - [ ] **`gold.fact_production` tiene ~410.000 filas, de `2006-01-01` a `2026-05-01`** (§1.4). Verde en Dagster **no** alcanza: si quedó en 0, el resto del setup miente.
+- [ ] `features.well_features` tiene el histórico backfilleado: ≥ 20 cortes desde `2024-04-01` (§1.5.0). Sin esto, el primer retraining falla con `no training cutoffs older than ...`.
 - [ ] La partición `2026-03-01` de `retraining_job` **falla** los gates en el ensayo (§1.5). Si pasa, cambiar el corte del bloque 3.
 - [ ] MLflow: experimento `petrocast-production-forecast` con ≥ 3 runs de métricas distintas.
 - [ ] MLflow → Models → `petrocast-production`: alias `@champion` en la versión de `2026-02-01`.

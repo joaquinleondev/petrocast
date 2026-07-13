@@ -34,6 +34,12 @@ services:
       # por un nombre distinto de localhost — p. ej. un reverse proxy o un
       # `tailscale serve`, donde el Host es el DNS de la tailnet.
       PETROCAST_MLFLOW_ALLOWED_HOSTS: ${PETROCAST_MLFLOW_ALLOWED_HOSTS:-localhost,127.0.0.1,mlflow}
+      # Orígenes CORS que la UI/API aceptan desde el navegador (default de
+      # MLflow: solo localhost). Igual que ALLOWED_HOSTS, ampliar cuando se
+      # llega por reverse proxy o `tailscale serve` — si no, la UI carga pero
+      # los fetch se bloquean ("Blocked cross-origin request") y no se ven
+      # runs ni modelos.
+      PETROCAST_MLFLOW_ALLOWED_ORIGINS: ${PETROCAST_MLFLOW_ALLOWED_ORIGINS:-http://localhost:5000,http://127.0.0.1:5000}
       # S3 credentials for the artifact store (unused in local fallback).
       # AWS_SESSION_TOKEN is required for temporary/SSO credentials, which is how
       # the team reaches the bucket (the org SCP forbids static IAM users).
@@ -42,7 +48,11 @@ services:
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-2}
     ports:
-      - "${PETROCAST_MLFLOW_PORT:-5000}:5000"
+      # PETROCAST_MLFLOW_BIND pins the host interface. Default 0.0.0.0 (todas).
+      # Ponerlo en 127.0.0.1 cuando la UI se expone por `tailscale serve`: el
+      # proxy escucha el mismo puerto en la IP de la tailnet, y publicar en
+      # 0.0.0.0 se lo pisa ("address already in use").
+      - "${PETROCAST_MLFLOW_BIND:-0.0.0.0}:${PETROCAST_MLFLOW_PORT:-5000}:5000"
     volumes:
       # Artifact storage for the local fallback; ignored when the artifact
       # root points at S3.
@@ -63,7 +73,8 @@ services:
           --backend-store-uri="$${backend_uri}" \
           --serve-artifacts \
           --artifacts-destination="$${PETROCAST_MLFLOW_ARTIFACT_ROOT}" \
-          --allowed-hosts="$${PETROCAST_MLFLOW_ALLOWED_HOSTS}"
+          --allowed-hosts="$${PETROCAST_MLFLOW_ALLOWED_HOSTS}" \
+          --cors-allowed-origins="$${PETROCAST_MLFLOW_ALLOWED_ORIGINS}"
     networks:
       - petrocast_data
     restart: unless-stopped

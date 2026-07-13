@@ -23,9 +23,9 @@ ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED=unknown
 
 LABEL org.opencontainers.image.source="https://github.com/petrocast/petrocast" \
-      org.opencontainers.image.version="${BUILD_VERSION}" \
-      org.opencontainers.image.revision="${BUILD_REVISION}" \
-      org.opencontainers.image.created="${BUILD_CREATED}"
+    org.opencontainers.image.version="${BUILD_VERSION}" \
+    org.opencontainers.image.revision="${BUILD_REVISION}" \
+    org.opencontainers.image.created="${BUILD_CREATED}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
