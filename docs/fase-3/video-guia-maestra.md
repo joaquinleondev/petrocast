@@ -319,13 +319,17 @@ para que resuelva Postgres y MLflow por `localhost` sin problemas de red.
 
 ### 1.7 Elegir el pozo de la demo
 
-Buscar pozos que tengan features materializadas en el corte del champion:
+Buscar pozos con features materializadas en el corte del champion y
+**producción alta**: para pozos marginales o planos el modelo predice el mismo
+valor en los 3 meses (los árboles no splitean por `horizon` en esos caminos) y
+el forecast queda plano en cámara. Con un pozo grande se ve la curva de
+declinación:
 
 ```bash
 docker compose --env-file apps/data/.env \
   -f infra/compose.data.yml -f infra/compose.mlflow.yml \
   exec data-postgres psql -U petrocast -d petrocast \
-  -c "SELECT well_id FROM features.well_features WHERE as_of_date = '2026-02-01' ORDER BY well_id LIMIT 5;"
+  -c "SELECT well_id, oil_prod_m3_lag_1m FROM features.well_features WHERE as_of_date = '2026-02-01' ORDER BY oil_prod_m3_lag_1m DESC NULLS LAST LIMIT 5;"
 ```
 
 Elegir uno (son ids numéricos tipo `135204`) y **anotarlo**: es `<POZO_DEMO>`

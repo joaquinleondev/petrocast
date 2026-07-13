@@ -12,7 +12,7 @@ producción vía `GET /api/v1/predictions` (Fase 3).
 
 ## Video Entrega Adenda Fase 1
 
-Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo?si=FLE44OcpUzbenkfb).
+Demo del proyecto disponible en [YouTube](https://youtu.be/ymsLBhMp4wo).
 
 ## Video Entrega Adenda Fase 2
 
@@ -20,7 +20,7 @@ Demo del proyecto disponible en [YouTube](https://youtu.be/4pZgppJV6uo).
 
 ## Video Entrega Adenda Fase 3
 
-Demo del proyecto disponible en YouTube: **TBD** (pendiente de grabación).
+Demo del proyecto disponible en YouTube: [YouTube](https://youtu.be/-qBiWuMpmKA).
 
 ## Equipo
 
@@ -43,11 +43,11 @@ Demo del proyecto disponible en YouTube: **TBD** (pendiente de grabación).
 
 ## Estado por fase
 
-| Fase   | Fecha      | Estado           | Demo                               |
-| ------ | ---------- | ---------------- | ---------------------------------- |
-| Fase 1 | 2026-04-28 | ✅ Completa      | [link](https://api.petrocast.shop) |
-| Fase 2 | 2026-06-09 | ✅ Completa      | [link](https://youtu.be/4pZgppJV6uo)                                  |
-| Fase 3 | 2026-07-11 | ✅ Completa      | [guion](docs/fase-3/README.md#guion--checklist-de-video) |
+| Fase   | Fecha      | Estado      | Demo                                 |
+| ------ | ---------- | ----------- | ------------------------------------ |
+| Fase 1 | 2026-04-28 | ✅ Completa | [link](https://api.petrocast.shop)   |
+| Fase 2 | 2026-06-09 | ✅ Completa | [link](https://youtu.be/4pZgppJV6uo) |
+| Fase 3 | 2026-07-11 | ✅ Completa | [link](https://youtu.be/-qBiWuMpmKA) |
 
 ## Cómo ejecutar
 
